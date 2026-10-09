@@ -49,3 +49,11 @@ still handles atomic writes. Game state and save schema belong to each consumer.
 Json::uint64Value and Json::readUInt64 preserve unsigned 64-bit counters as decimal
 JSON strings; safe numeric inputs up to 9007199254740991 are accepted. JsonValue::contains
 includes explicit null fields, while has keeps its existing non-null semantics.
+
+Localization is a Core facility. Configuration names language catalogue paths;
+loadConfig merges catalogue mods. Missing messages use the fallback catalogue's
+own plural rules. Reload is transactional; unresolved keys remain visible as IDs.
+Integer plural categories are JSON predicates, independent of built-in languages.
+Utf8 supplies decoding/validation and complete-code-point deletion. SDL2 BitmapFont
+uses Unicode glyph maps, fallback glyphs, measured text and bounded atlas drawing.
+The consumer decodes font resources and maps character slots to Unicode.

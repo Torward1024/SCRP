@@ -1,3 +1,4 @@
+#include "scrp/BitmapFont.h"
 #ifndef SDL_MAIN_HANDLED
 #define SDL_MAIN_HANDLED
 #endif
@@ -57,6 +58,15 @@ int main() {
     CHECK(gfx.assets().hasTexture(injected));
     CHECK(gfx.captureBmp((temporary/"capture.bmp").u8string()));
     CHECK(std::filesystem::file_size(temporary/"capture.bmp")>32*24);
+    BitmapFont font;
+    CHECK(font.configure(injected, 3, {{'A', {{1,0,1,1},2}}, {'?', {{1,0,1,1},1}}, {0x0416, {{1,0,1,1},3}}}));
+    CHECK(font.textWidth("AA\nA") == 4);
+    CHECK(font.textWidth(u8"\u0416A") == 5);
+    CHECK(font.textWidth("Z") == 1);
+    CHECK(!font.configure({}, 3, {{'A', {{1,0,1,1},2}}}));
+    gfx.beginFrame({0,0,255,255}); CHECK(font.draw(gfx,0,0,u8"A\u0416",{255,255,255,255},2));
+    CHECK(SDL_RenderReadPixels(window.renderer(),nullptr,SDL_PIXELFORMAT_RGBA32,pixels.data(),32*4)==0);
+    CHECK(pixels[1]==255 && pixels[2*4+2]==255);
     Decals decals;decals.configure(parse(R"({"max_dimension":64,"max_fading":2,"recipes":{"mark":{"rects":[{"x":0,"y":0,"w":2,"h":2,"color":[255,0,0,255]}]}}})"));
     CHECK(decals.init(gfx,32,24));decals.stampRecipe("mark",{10,10},Col::White);CHECK(decals.stampCount()==1);
     for(int i=0;i<4;++i) {decals.addFadingFootprint({4,4},{1,0},Col::White,.1f);}

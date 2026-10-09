@@ -14,7 +14,7 @@ $toolchainBin = Split-Path $compiler
 $env:PATH = $toolchainBin + ';' + $env:PATH
 $flags = @('-std=c++17', '-Wall', '-Wextra', '-Wpedantic', "-I$root\include")
 if ($Release) { $flags += @('-O2', '-DNDEBUG') } else { $flags += @('-g', '-O0') }
-$sources = @('Json','Vfs','IndexedImage','Config','Xml','Anim','Grid','FlowField','PathFinder','SaveStore') | ForEach-Object { Join-Path $root "src\$_.cpp" }
+$sources = @('Json','Localization','Vfs','IndexedImage','Config','Xml','Anim','Grid','FlowField','PathFinder','SaveStore') | ForEach-Object { Join-Path $root "src\$_.cpp" }
 if ($Test) {
     $testExe = Join-Path $outputDir 'scrp_tests.exe'
     & $compiler @flags @sources (Join-Path $root 'tests\main.cpp') '-o' $testExe
@@ -28,7 +28,7 @@ if ($Test) {
     if($LASTEXITCODE -ne 0) {throw 'Runtime tests failed'}
     if($SDLTest) {
         $prefix=Split-Path $toolchainBin
-        $sdlSources=@('PixelWindow','Assets','Gfx','MicroFont','Lighting','Decals','Particles','Window','Audio') | ForEach-Object {Join-Path $root "src/$_.cpp"}
+        $sdlSources=@('PixelWindow','Assets','Gfx','MicroFont','BitmapFont','Lighting','Decals','Particles','Window','Audio') | ForEach-Object {Join-Path $root "src/$_.cpp"}
         $sdlExe=Join-Path $outputDir 'scrp_sdl_tests.exe'
         & $compiler @flags @sources @sdlSources (Join-Path $root 'tests/sdl.cpp') "-I$prefix/include/SDL2" "-L$prefix/lib" '-DSDL_MAIN_HANDLED' '-DSCRP_USE_SDL_MIXER' '-DSCRP_TEST_WITH_MIXER' '-lSDL2' '-lSDL2_mixer' '-o' $sdlExe
         if($LASTEXITCODE -ne 0) {throw 'SDL test compilation failed'}

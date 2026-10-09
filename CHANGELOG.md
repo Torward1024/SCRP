@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Load layered localization catalogues with regional and fallback language lookup,
+  one-pass placeholders and exact integer plural predicates supplied by JSON.
+- Validate/edit UTF-8 and draw game-supplied Unicode bitmap glyph maps without
+  adding game formats, language-specific grammar or font assets to the engine.
+
 - Serialize JSON values for application saves with bounded nesting and stable numeric formatting.
 - Preserve exact unsigned 64-bit counters through decimal strings; distinguish explicit null fields from missing fields.
 - Upload decoded indexed images into sprite registries; games own their decoders.

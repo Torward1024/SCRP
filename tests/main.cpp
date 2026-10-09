@@ -1,4 +1,6 @@
 #include "scrp/Json.h"
+#include "scrp/Localization.h"
+#include "scrp/Utf8.h"
 #include "scrp/Vfs.h"
 #include "scrp/IndexedImage.h"
 #include <chrono>
@@ -59,6 +61,48 @@ void serializationTests() {
     value = {}; for (int i = 0; i < 130; ++i) { scrp::JsonValue next; next.type = scrp::JsonValue::Type::Array; next.array.push_back(std::move(value)); value = std::move(next); }
     CHECK(!scrp::Json::stringify(value, output, &error));
 }
+void utf8Tests() {
+    std::string name = u8"Rome \u0416\U0001f30d";
+    CHECK(scrp::Utf8::valid(name)); CHECK(scrp::Utf8::popBack(name)); CHECK(name == u8"Rome \u0416");
+    CHECK(scrp::Utf8::popBack(name)); CHECK(name == "Rome ");
+    CHECK(!scrp::Utf8::valid("\xc0\xaf")); CHECK(!scrp::Utf8::valid("\xed\xa0\x80"));
+    CHECK(!scrp::Utf8::valid("\xf4\x90\x80\x80")); CHECK(!scrp::Utf8::valid("\xe2\x82"));
+    size_t pos = 0; uint32_t value = 7; CHECK(!scrp::Utf8::next("\x80",pos,value)); CHECK(pos == 0 && value == 7);
+}
+void localizationTests() {
+    const auto root = fs::temp_directory_path() / ("scrp-locales-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root / "base"); fs::create_directories(root / "mod");
+    struct Cleanup { fs::path root; ~Cleanup() { scrp::Vfs::unmountAll(); std::error_code ec; fs::remove_all(root, ec); } } cleanup{root};
+    std::ofstream(root / "base/en.json") << R"({"schema_version":1,"plural_rules":[{"form":"one","conditions":[{"in":[[1,1]]}]}],"messages":{"hello":"Hello {name}","cities":{"one":"{count} city","other":"{count} cities"},"fallback":{"one":"English one","other":"English other"},"braces":"{{literal}} {name} {unknown}","blank":""}})";
+    std::ofstream(root / "base/ru.json") << R"({"schema_version":1,"plural_rules":[{"form":"one","conditions":[{"mod":10,"in":[[1,1]]},{"mod":100,"not_in":[[11,11]]}]},{"form":"few","conditions":[{"mod":10,"in":[[2,4]]},{"mod":100,"not_in":[[12,14]]}]},{"form":"many","conditions":[{"mod":10,"in":[[0,0],[5,9]]}]},{"form":"many","conditions":[{"mod":100,"in":[[11,14]]}]}],"messages":{"hello":"\u041f\u0440\u0438\u0432\u0435\u0442 {name}","cities":{"one":"one {count}","few":"few {count}","many":"many {count}","other":"other {count}"}}})";
+    // A category can have multiple alternative rules; first matching condition set wins.
+    CHECK(scrp::Vfs::mountDir((root / "base").u8string()));
+    scrp::JsonValue config; std::string error;
+    CHECK(scrp::Json::parse(R"({"schema_version":1,"language":"ru-RU","fallback":"en","catalogues":{"en":"en.json","ru":"ru.json"}})", config));
+    scrp::Localization locale;
+    CHECK(locale.text("missing") == "missing");
+    CHECK(locale.configure(config, &error)); CHECK(locale.language() == "ru");
+    CHECK(locale.text("hello", {{"name", "Alex"}}) == u8"\u041f\u0440\u0438\u0432\u0435\u0442 Alex");
+    CHECK(locale.text("cities", {}, 1) == "one 1"); CHECK(locale.text("cities", {}, 21) == "one 21");
+    CHECK(locale.text("cities", {}, 2) == "few 2"); CHECK(locale.text("cities", {}, 24) == "few 24");
+    CHECK(locale.text("cities", {}, 0) == "many 0"); CHECK(locale.text("cities", {}, 5) == "many 5");
+    CHECK(locale.text("cities", {}, 11) == "many 11"); CHECK(locale.text("cities", {}, 14) == "many 14");
+    CHECK(locale.text("fallback", {}, 21) == "English other");
+    CHECK(locale.text("braces", {{"name", "{count}"}}, 12) == "{literal} {count} {unknown}");
+    CHECK(locale.text("blank").empty());
+    std::ofstream(root / "mod/ru.json") << R"({"messages":{"hello":"Mod {name}"}})";
+    CHECK(scrp::Vfs::mountDir((root / "mod").u8string())); CHECK(locale.configure(config));
+    CHECK(locale.text("hello", {{"name", "Alex"}}) == "Mod Alex");
+    std::ofstream(root / "mod/ru.json") << R"({"plural_rules":[{"form":"one","conditions":[{"mod":0,"in":[[1,1]]}]}]})";
+    CHECK(!locale.configure(config, &error)); CHECK(locale.text("hello", {{"name", "Alex"}}) == "Mod Alex");
+    for (auto& field : config.object) if (field.first == "language") field.second.str = "fr-CA";
+    CHECK(locale.configure(config)); CHECK(locale.language() == "en");
+    CHECK(locale.text("cities", {}, 1) == "1 city"); CHECK(locale.text("cities", {}, UINT64_MAX) == "18446744073709551615 cities");
+    std::ofstream(root / "base/config.json") << R"({"schema_version":1,"language":"ru","fallback":"en","catalogues":{"en":"en.json","ru":"ru.json"}})";
+    CHECK(locale.load("config.json", &error, "en-GB")); CHECK(locale.language() == "en");
+    CHECK(!locale.load("missing.json", &error)); CHECK(locale.language() == "en");
+}
+
 void vfsTests() {
     const fs::path root = fs::temp_directory_path()/
         ("scrp-tests-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -116,6 +160,6 @@ void vfsTests() {
 }
 }
 int main() {
-    try { jsonTests(); serializationTests(); vfsTests(); std::cout << "SCRP: " << checks << " checks passed\n"; return 0; }
+    try { jsonTests(); serializationTests(); vfsTests(); utf8Tests(); localizationTests(); std::cout << "SCRP: " << checks << " checks passed\n"; return 0; }
     catch (const std::exception& e) { std::cerr << "SCRP test failure: " << e.what() << '\n'; return 1; }
 }

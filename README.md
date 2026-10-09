@@ -77,3 +77,7 @@ never select or modify a sibling development checkout.
 See [architecture and JSON](docs/ARCHITECTURE.md) and
 [dependency versions](docs/DEPENDENCIES.md). The 0.2 API is evolving. I add shared
 capabilities here and game rules in the corresponding consumer project.
+
+Core localization loads JSON catalogues, language fallback, placeholders and
+integer plural predicates. UTF-8 helpers and SDL2 Unicode bitmap fonts let games
+supply their own text and glyph assets. No game language data is built into SCRP.
