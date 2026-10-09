@@ -13,10 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Dependencies
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev cmake ninja-build
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev cmake ninja-build
       - name: Core and SDL2
         run: |
-          cmake -S . -B build -G Ninja -DSCRP_WITH_SDL2=ON
+          cmake -S . -B build -G Ninja -DSCRP_WITH_SDL2=ON -DSCRP_USE_SDL_IMAGE=ON -DSCRP_USE_SDL_MIXER=ON
           cmake --build build
           ctest --test-dir build --output-on-failure
           python3 -m unittest discover -s tests -p test_sync_engine.py -v
@@ -34,9 +34,9 @@ jobs:
         with:
           msystem: UCRT64
           update: true
-          install: mingw-w64-ucrt-x86_64-gcc
+          install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-SDL2_mixer
       - name: Core and bootstrap tests
         shell: pwsh
         env:
           MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
-        run: ./build.ps1 -Test
+        run: ./build.ps1 -Test -SDLTest

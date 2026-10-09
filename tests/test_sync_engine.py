@@ -35,14 +35,16 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(self.root.resolve().parent, Path(tempfile.gettempdir()).resolve())
         self.tmp.cleanup()
 
-    def test_clean_matching_sibling_is_shared(self):
-        self.assertEqual(sync.resolve(self.project, self.lock, offline=True), self.repo.resolve())
-        self.assertFalse((self.project/".deps").exists())
+    def test_clean_sibling_is_not_implicitly_selected(self):
+        result = sync.resolve(self.project, self.lock)
+        self.assertEqual(result, (self.project/"engine/SCRP").resolve())
+        self.assertNotEqual(result, self.repo.resolve())
+        self.assertEqual(sync.resolve(self.project, self.lock, offline=True), result)
 
     def test_dirty_sibling_is_preserved_and_cache_is_pinned(self):
         (self.repo/"src/Json.cpp").write_text("developer edits\n", encoding="utf-8")
         result = sync.resolve(self.project, self.lock)
-        self.assertEqual(result, (self.project/".deps/SCRP").resolve())
+        self.assertEqual(result, (self.project/"engine/SCRP").resolve())
         self.assertEqual((self.repo/"src/Json.cpp").read_text(), "developer edits\n")
         self.assertEqual(sync.git("branch", "--show-current", cwd=self.repo).stdout.strip(), "main")
         self.assertEqual(sync.git("rev-parse", "HEAD", cwd=result).stdout.strip(), self.revision)

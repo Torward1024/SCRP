@@ -42,12 +42,9 @@ def resolve(project, lock, override=None, offline=False):
         print(f"[SCRP] local development override: {path}", file=sys.stderr)
         return path
     revision = lock["revision"]
-    sibling = project.parent / "SCRP"
-    if matches(sibling, revision):
-        print(f"[SCRP] shared checkout {revision[:12]}: {sibling}", file=sys.stderr)
-        return validate_engine(sibling)
-    # Only this ignored checkout is managed. The sibling developer checkout is never changed.
-    cache = project / ".deps" / "SCRP"
+    # All normal builds use the same predictable, ignored path in each consumer.
+    # The standalone developer checkout is used only through an explicit override.
+    cache = project / "engine" / "SCRP"
     cache.parent.mkdir(parents=True, exist_ok=True)
     if cache.exists():
         if not (cache / ".git").is_dir():
@@ -66,7 +63,7 @@ def resolve(project, lock, override=None, offline=False):
         if offline:
             raise RuntimeError(f"SCRP commit {revision} is not cached")
         git("fetch", "--no-tags", "origin", revision, cwd=cache)
-    # A generated cache may be detached. A developer's E:/Dev/SCRP never is.
+    # Only the managed cache may be detached; development overrides are never changed.
     if git("rev-parse", "HEAD", cwd=cache, check=False).stdout.strip() != revision:
         git("checkout", "--detach", revision, cwd=cache)
     if not matches(cache, revision):
