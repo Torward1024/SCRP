@@ -58,7 +58,9 @@ def resolve(project, lock, override=None, offline=False):
         if offline:
             raise RuntimeError("SCRP is not available locally; run synchronization online once")
         git("clone", lock["repository"], cache)
-    available = git("cat-file", "-e", revision + "^{commit}", cwd=cache, check=False).returncode == 0
+    # MSYS2 expands braces in revision expressions; query the raw object type.
+    object_type = git("cat-file", "-t", revision, cwd=cache, check=False)
+    available = object_type.returncode == 0 and object_type.stdout.strip() == "commit"
     if not available:
         if offline:
             raise RuntimeError(f"SCRP commit {revision} is not cached")
