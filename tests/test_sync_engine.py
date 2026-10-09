@@ -29,7 +29,7 @@ class SyncTests(unittest.TestCase):
         self.revision = sync.git("rev-parse", "HEAD", cwd=self.repo).stdout.strip()
         self.project = self.root/"Game"
         self.project.mkdir()
-        self.lock = {"repository": self.repo.as_uri(), "revision": self.revision}
+        self.lock = {"repository": self.repo.as_posix(), "revision": self.revision}
 
     def tearDown(self):
         self.assertEqual(self.root.resolve().parent, Path(tempfile.gettempdir()).resolve())
