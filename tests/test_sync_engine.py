@@ -29,7 +29,9 @@ class SyncTests(unittest.TestCase):
         self.revision = sync.git("rev-parse", "HEAD", cwd=self.repo).stdout.strip()
         self.project = self.root/"Game"
         self.project.mkdir()
-        self.lock = {"repository": self.repo.as_posix(), "revision": self.revision}
+        # Use Git's own path format: MSYS2 canonicalizes Windows drive paths.
+        repository = sync.git("rev-parse", "--show-toplevel", cwd=self.repo).stdout.strip()
+        self.lock = {"repository": repository, "revision": self.revision}
 
     def tearDown(self):
         self.assertEqual(self.root.resolve().parent, Path(tempfile.gettempdir()).resolve())

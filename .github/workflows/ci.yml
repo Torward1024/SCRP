@@ -34,9 +34,12 @@ jobs:
         with:
           msystem: UCRT64
           update: true
-          install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-SDL2_mixer
+          install: git mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-SDL2_mixer
       - name: Core and bootstrap tests
         shell: pwsh
         env:
           MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
         run: ./build.ps1 -Test -SDLTest
+      - name: MSYS2 bootstrap tests
+        shell: msys2 {0}
+        run: python -m unittest discover -s tests -p test_sync_engine.py -v
