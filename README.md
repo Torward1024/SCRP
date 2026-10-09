@@ -1,5 +1,10 @@
 # SCRP
 
+[![SCRP 0.2.0](https://img.shields.io/badge/SCRP-0.2.0-blue)](https://github.com/Torward1024/SCRP)
+[![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C)](CMakeLists.txt)
+[![SDL2](https://img.shields.io/badge/SDL-2-194B6A)](https://www.libsdl.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+
 SCRP is my C++17 / SDL2 engine for recreating classic games. The name comes from
 **scrap**: fragments of something old and worn. I extracted the shared systems
 from Scrapheart and connected FirstDawn to the same engine.
@@ -12,8 +17,8 @@ Resource bindings and runtime settings are supplied through JSON.
 
 | Target | Features | Dependencies |
 |---|---|---|
-| `SCRP::Core` | JSON/XML/VFS, configuration, indexed images/BMP, vectors/RNG, animation, events/signals/stats, grid collision/visibility, flow fields/A*, saves, fixed steps | C++17 |
-| `SCRP::SDL2` | Windows, pixel output, sprite registries/roles, drawing/camera, input, microfont, lighting, particles and decals | SDL2; optional SDL2_image |
+| `SCRP::Core` | JSON/XML/VFS, configuration, indexed images/BMP, vectors/RNG, animation, events/signals/stats, grid collision/visibility, flow fields/A*, saves, localization/UTF-8, fixed steps | C++17 |
+| `SCRP::SDL2` | Windows, pixel output, sprite registries/roles, drawing/camera, input, diagnostic/Unicode bitmap fonts, lighting, particles and decals | SDL2; optional SDL2_image |
 | `SCRP::Audio` | Sound registry, channels/priorities, spatial audio, ambient loops and music | SDL2; optional SDL2_mixer |
 
 Core has no SDL or game dependencies. A game supplies its solid grid, action names
@@ -81,3 +86,10 @@ capabilities here and game rules in the corresponding consumer project.
 Core localization loads JSON catalogues, language fallback, placeholders and
 integer plural predicates. UTF-8 helpers and SDL2 Unicode bitmap fonts let games
 supply their own text and glyph assets. No game language data is built into SCRP.
+
+## License
+
+My code and project documentation are distributed under the [MIT license](LICENSE).
+Dependencies retain their own licenses; SDL2 uses the
+[zlib license](https://www.libsdl.org/license.php). Original game resources
+retain their owners' licenses and are not covered by this license.
