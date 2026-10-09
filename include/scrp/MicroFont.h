@@ -8,7 +8,7 @@ namespace MicroFont {
 
 constexpr int GLYPH_W = 3;
 constexpr int GLYPH_H = 5;
-constexpr int ADVANCE = 4;   // ширина глифа + 1 пиксель разрядки
+constexpr int ADVANCE = 4;   // glyph width plus one spacing pixel
 
 int textWidth(const char* text);
 

@@ -1,4 +1,4 @@
-﻿param([switch]$Test, [switch]$Release, [switch]$SDLTest)
+param([switch]$Test, [switch]$Release, [switch]$SDLTest)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $outputDir = Join-Path $root 'build'

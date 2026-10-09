@@ -58,7 +58,7 @@ private:
     bool fail(const char* what) {
         if (error_.empty()) {
             char buf[192];
-            std::snprintf(buf, sizeof(buf), "позиция %zu: %s", pos_, what);
+            std::snprintf(buf, sizeof(buf), "position %zu: %s", pos_, what);
             error_ = buf;
         }
         return false;
@@ -132,22 +132,22 @@ private:
     bool parseAttributes(XmlNode& node) {
         for (;;) {
             skipSpace();
-            if (eof()) return fail("тег не закрыт");
+            if (eof()) return fail("unterminated tag");
             if (peek() == '>' || peek() == '/') return true;
 
             std::string key = readName();
-            if (key.empty()) return fail("ожидалось имя атрибута");
+            if (key.empty()) return fail("expected attribute name");
 
             skipSpace();
-            if (eof() || peek() != '=') return fail("ожидалось '=' после атрибута");
+            if (eof() || peek() != '=') return fail("expected '=' after attribute name");
             ++pos_;
             skipSpace();
 
-            if (eof() || (peek() != '"' && peek() != '\'')) return fail("значение без кавычек");
+            if (eof() || (peek() != '"' && peek() != '\'')) return fail("unquoted value");
             char quote = s_[pos_++];
             size_t start = pos_;
             while (!eof() && s_[pos_] != quote) ++pos_;
-            if (eof()) return fail("незакрытое значение атрибута");
+            if (eof()) return fail("unterminated attribute value");
 
             node.attrs[key] = decode(s_.substr(start, pos_ - start));
             ++pos_;
@@ -156,17 +156,17 @@ private:
 
     bool parseElement(XmlNode& node) {
         skipSpace();
-        if (eof() || peek() != '<') return fail("ожидался элемент");
+        if (eof() || peek() != '<') return fail("expected element");
         ++pos_;
 
         node.name = readName();
-        if (node.name.empty()) return fail("ожидалось имя элемента");
+        if (node.name.empty()) return fail("expected element name");
 
         if (!parseAttributes(node)) return false;
 
-        if (peek() == '/') {          // самозакрытый тег
+        if (peek() == '/') {          // self-closing tag
             ++pos_;
-            if (eof() || peek() != '>') return fail("ожидалось '>' после '/'");
+            if (eof() || peek() != '>') return fail("expected '>' after '/'");
             ++pos_;
             return true;
         }
@@ -174,16 +174,16 @@ private:
 
         std::string content;
         for (;;) {
-            if (eof()) return fail("элемент не закрыт");
+            if (eof()) return fail("unterminated element");
 
             if (startsWith("<!--")) { skipUntil("-->"); continue; }
 
             if (startsWith("</")) {
                 pos_ += 2;
                 std::string closing = readName();
-                if (closing != node.name) return fail("несовпадающий закрывающий тег");
+                if (closing != node.name) return fail("mismatched closing tag");
                 skipSpace();
-                if (eof() || peek() != '>') return fail("ожидалось '>'");
+                if (eof() || peek() != '>') return fail("expected '>'");
                 ++pos_;
                 node.text = decode(content);
                 return true;
@@ -215,7 +215,7 @@ bool parse(const std::string& text, XmlNode& out, std::string* error) {
 bool parseAsset(const std::string& path, XmlNode& out, std::string* error) {
     std::string text;
     if (!Vfs::readText(path, text)) {
-        if (error) *error = "нет ресурса: " + path;
+        if (error) *error = "missing resource: " + path;
         return false;
     }
     if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF &&

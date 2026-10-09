@@ -58,7 +58,7 @@ bool PathFinder::find(const Grid& level, const Vec2& from, const Vec2& to,
     int gy = static_cast<int>(std::floor(to.y / level.tileSize()));
 
     if (!passable(level, sx, sy) || !passable(level, gx, gy)) return false;
-    if (sx == gx && sy == gy) return false;   // уже на месте, маршрут не нужен
+    if (sx == gx && sy == gy) return false;   // already at the destination; no route needed
 
     const size_t cells = static_cast<size_t>(w) * h;
     std::vector<int> gScore(cells, -1);
@@ -121,7 +121,7 @@ bool PathFinder::find(const Grid& level, const Vec2& from, const Vec2& to,
         out.push_back(path[i]);
         anchor = path[i];
     }
-    out.push_back(path.back());   // цель остаётся всегда
+    out.push_back(path.back());   // always retain the destination
     return true;
 }
 

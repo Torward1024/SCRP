@@ -75,7 +75,7 @@ const Glyph* glyphFor(char c) {
         case '/': return &kSlash;
         case '!': return &kExcl;
         case '%': return &kPercent;
-        default:  return nullptr;   // пробел и всё незнакомое — пустое место
+        default:  return nullptr;   // spaces and unsupported characters render blank
     }
 }
 
@@ -86,7 +86,7 @@ namespace MicroFont {
 int textWidth(const char* text) {
     if (!text || !*text) return 0;
     int len = static_cast<int>(std::strlen(text));
-    return len * ADVANCE - 1;   // последний пробел разрядки не считаем
+    return len * ADVANCE - 1;   // omit the trailing spacing pixel
 }
 
 void draw(Gfx& gfx, int x, int y, const char* text, SDL_Color color) {

@@ -43,8 +43,8 @@ public:
     int lightCount() const { return static_cast<int>(lights_.size()); }
 
 private:
-    SDL_Texture* target_ = nullptr;   // лайтмап размером с кадр
-    SDL_Texture* glow_ = nullptr;     // радиальный градиент, собирается один раз
+    SDL_Texture* target_ = nullptr;   // light map matching the logical frame
+    SDL_Texture* glow_ = nullptr;     // radial gradient built during initialization
 
     SDL_Texture* scratch_ = nullptr;
     SDL_BlendMode addPremul_ = SDL_BLENDMODE_ADD;

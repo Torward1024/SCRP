@@ -5,9 +5,9 @@
 
 namespace scrp {
 enum class Bus {
-    Sfx,       // события игрока и врагов
-    World,     // привязанные к точке на карте, слышны в радиусе
-    Ambient,   // фоновая петля биома или зоны
+    Sfx,       // immediate sound events
+    World,     // positional sounds audible within a radius
+    Ambient,   // background loops
     Music,
     Count
 };
@@ -38,8 +38,8 @@ float busVolume(Bus bus);
 void setMasterVolume(float v);
 float masterVolume();
 
-int requestCount();      // сколько раз звук просили сыграть за сессию
-int loadedCount();       // сколько файлов реально нашлось
+int requestCount();      // sound requests during this session
+int loadedCount();       // number of successfully loaded files
 int activeVoices();
 
 } // namespace Audio

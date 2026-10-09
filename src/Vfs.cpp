@@ -11,24 +11,24 @@ namespace fs = std::filesystem;
 
 namespace {
 
-// ---------------------------------------------------------- формат ---
-// Раскладка пака `.scrap` (версия 1, всё little-endian):
+// ---------------------------------------------------------- format ---
+// Layout of a .scrap package (version 1, all fields little-endian):
 //
 //   [0..3]    "SCRP"
-//   [4..7]    версия
-//   [8..15]   смещение таблицы
-//   [16..19]  количество записей
-//   [20..]    блобы подряд
-//   [таблица] на каждую запись:
-//               uint16 длина пути
-//               байты  путь (UTF-8, разделитель '/')
-//               uint64 смещение блоба
-//               uint32 размер
+//   [4..7]    version
+//   [8..15]   table offset
+//   [16..19]  entry count
+//   [20..]    consecutive data blobs
+//   [table] each entry contains:
+//               uint16 path length
+//               bytes  path (UTF-8, '/' separator)
+//               uint64 blob offset
+//               uint32 size
 //               uint32 crc32
 //
-// Таблица в конце, чтобы упаковщик мог писать блобы потоком и не держать
-// весь пак в памяти. Сжатия в версии 1 нет намеренно: формат должен быть
-// тривиально правильным, сжатие добавится за тем же API.
+// Placing the table at the end lets the packer stream blobs without keeping
+// the entire package in memory. Version 1 has no compression;
+// future compression support can use the same resource API.
 constexpr char kMagic[4] = { 'S', 'C', 'R', 'P' };
 constexpr uint32_t kVersion = 1;
 constexpr size_t kHeaderSize = 20;
@@ -42,15 +42,15 @@ struct PackEntry {
 struct Mount {
     enum class Kind { Dir, Pack };
     Kind kind = Kind::Dir;
-    std::string path;                          // корень папки или путь к паку
-    std::map<std::string, PackEntry> entries;  // только для Pack
+    std::string path;                          // directory root or package path
+    std::map<std::string, PackEntry> entries;  // used only by package mounts
 };
 
-// Монтирования в порядке добавления; поиск идёт с конца — позднее важнее
+// Mounts are ordered by insertion; reverse lookup gives later mounts priority.
 std::vector<Mount> g_mounts;
 int g_misses = 0;
 
-// ---------------------------------------------------------- утилиты ---
+// ---------------------------------------------------------- utilities ---
 
 uint32_t crc32(const uint8_t* data, size_t len) {
     static uint32_t table[256];
@@ -68,7 +68,7 @@ uint32_t crc32(const uint8_t* data, size_t len) {
     return c ^ 0xFFFFFFFFu;
 }
 
-// Приводим к единому виду: прямые слэши, без "./" и ведущего слэша
+// Normalize to forward slashes without a leading slash or './'.
 std::string normalize(const std::string& path) {
     std::string out;
     out.reserve(path.size());
@@ -127,8 +127,8 @@ bool readFrom(const Mount& m, const std::string& path, std::vector<uint8_t>& out
         if (!f) return false;
     }
 
-    // Битый пак лучше заметить сразу, но не падать: данные всё равно отдаём,
-    // а в лог уходит предупреждение
+    // Calculate checksums before publishing package entries.
+    // Corrupt entries are rejected with a diagnostic.
     if (crc32(out.data(), out.size()) != it->second.crc) {
         out.clear();
         return false;
@@ -148,7 +148,7 @@ bool mountDir(const std::string& path) {
     m.kind = Mount::Kind::Dir;
     m.path = path;
     g_mounts.push_back(std::move(m));
-    std::printf("[vfs] смонтирована папка '%s'\n", path.c_str());
+    std::printf("[vfs] mounted directory '%s'\n", path.c_str());
     return true;
 }
 
@@ -163,13 +163,13 @@ bool mountPack(const std::string& path) {
     uint8_t header[kHeaderSize];
     f.read(reinterpret_cast<char*>(header), kHeaderSize);
     if (!f || std::memcmp(header, kMagic, 4) != 0) {
-        std::printf("[vfs] '%s': не пак scrap\n", path.c_str());
+        std::printf("[vfs] '%s': not a scrap package\n", path.c_str());
         return false;
     }
 
     uint32_t version = readLE<uint32_t>(header + 4);
     if (version != kVersion) {
-        std::printf("[vfs] '%s': версия пака %u, поддерживается %u\n",
+        std::printf("[vfs] '%s': package version %u, supported version %u\n",
                     path.c_str(), version, kVersion);
         return false;
     }
@@ -198,7 +198,7 @@ bool mountPack(const std::string& path) {
         uint8_t rest[16];
         f.read(reinterpret_cast<char*>(rest), 16);
         if (!f) {
-            std::printf("[vfs] '%s': таблица оборвалась на записи %u\n", path.c_str(), i);
+            std::printf("[vfs] '%s': truncated table at entry %u\n", path.c_str(), i);
             return false;
         }
 
@@ -213,7 +213,7 @@ bool mountPack(const std::string& path) {
         m.entries[key] = e;
     }
 
-    std::printf("[vfs] смонтирован пак '%s': %zu файлов\n", path.c_str(), m.entries.size());
+    std::printf("[vfs] mounted package '%s': %zu files\n", path.c_str(), m.entries.size());
     g_mounts.push_back(std::move(m));
     return true;
 }
@@ -222,8 +222,8 @@ int mountPacksFrom(const std::string& dir, const std::string& ext) {
     std::error_code ec;
     if (!fs::is_directory(dir, ec)) return 0;
 
-    // По алфавиту: порядок монтирования должен быть предсказуем,
-    // иначе два DLC могли бы перекрывать друг друга по-разному на разных машинах
+    // Sort alphabetically to make mount ordering deterministic;
+    // content layers must resolve identically on different machines.
     std::vector<std::string> packs;
     for (const auto& entry : fs::directory_iterator(dir, ec)) {
         if (!entry.is_regular_file(ec)) continue;
@@ -267,7 +267,7 @@ bool exists(const std::string& path) {
 bool read(const std::string& path, std::vector<uint8_t>& out) {
     out.clear();
     std::string key = normalize(path);
-    // С конца: последнее смонтированное имеет наибольший приоритет
+    // Search backwards: the latest mount has the highest priority.
     for (auto it = g_mounts.rbegin(); it != g_mounts.rend(); ++it) {
         if (mountHas(*it, key)) return readFrom(*it, key, out);
     }
@@ -286,7 +286,7 @@ bool readText(const std::string& path, std::string& out) {
 bool readLayers(const std::string& path, std::vector<std::vector<uint8_t>>& out) {
     std::string key = normalize(path);
     out.clear();
-    // По возрастанию приоритета: сначала база, потом то, что её перекрывает
+    // Read in priority order: base first, then overriding layers.
     for (const Mount& m : g_mounts) {
         std::vector<uint8_t> bytes;
         if (!mountHas(m, key)) continue;
@@ -338,7 +338,7 @@ std::string describe(const std::string& path) {
     for (auto it = g_mounts.rbegin(); it != g_mounts.rend(); ++it) {
         if (mountHas(*it, key)) return it->path;
     }
-    return "<не найдено>";
+    return "<not found>";
 }
 
 int missCount() { return g_misses; }

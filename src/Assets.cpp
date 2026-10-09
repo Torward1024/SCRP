@@ -86,7 +86,7 @@ bool Assets::loadRegistry() {
             continue;
         }
         if (!root.isObject()) {
-            std::printf("[assets] sprites.json: ожидался объект вида id -> запись\n");
+            std::printf("[assets] sprites.json: expected an object mapping ids to entries\n");
             continue;
         }
 
@@ -100,7 +100,7 @@ bool Assets::loadRegistry() {
 
             auto found = byName_.find(kv.first);
             if (found != byName_.end()) {
-                d = sprites_[found->second];   // правим поверх, а не с нуля
+                d = sprites_[found->second];   // apply the layer over the previous definition
                 ++overrides;
             }
 
@@ -124,7 +124,7 @@ bool Assets::loadRegistry() {
     textures_.assign(sprites_.size(), nullptr);
     attempted_.assign(sprites_.size(), 0);
 
-    std::printf("[assets] спрайтов %zu, перекрытий %d\n", sprites_.size(), overrides);
+    std::printf("[assets] %zu sprites, %d overrides\n", sprites_.size(), overrides);
     return !sprites_.empty();
 }
 
@@ -144,7 +144,7 @@ bool Assets::init(SDL_Renderer* renderer) {
 #ifdef SCRP_USE_SDL_IMAGE
     int flags = IMG_INIT_PNG;
     if ((IMG_Init(flags) & flags) != flags) {
-        std::printf("[assets] SDL_image не инициализировался: %s\n", IMG_GetError());
+        std::printf("[assets] SDL_image initialization failed: %s\n", IMG_GetError());
     }
 #endif
     return renderer_ != nullptr;
@@ -196,7 +196,7 @@ SDL_Texture* Assets::load(const SpriteDef& spriteDef) {
 
     SDL_Surface* surface = nullptr;
     if (endsWith(path, ".bmp")) {
-        surface = SDL_LoadBMP_RW(rw, 1);   // 1 = SDL сам закроет RWops
+        surface = SDL_LoadBMP_RW(rw, 1);   // the loader takes ownership of RWops
     } else {
 #ifdef SCRP_USE_SDL_IMAGE
         surface = IMG_Load_RW(rw, 1);
@@ -227,7 +227,7 @@ SDL_Texture* Assets::texture(SpriteId id) {
     textures_[index] = load(sprites_[index]);
     if (!textures_[index]) {
         ++missing_;
-        std::printf("[assets] нет файла '%s' (спрайт '%s') — рисую заглушку\n",
+        std::printf("[assets] missing file '%s' for sprite '%s'; using a placeholder\n",
                     sprites_[index].file.c_str(), sprites_[index].name.c_str());
     }
     return textures_[index];

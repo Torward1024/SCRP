@@ -19,7 +19,7 @@ void check(bool value, const char* expression, int line) {
 void jsonTests() {
     scrp::JsonValue value; std::string error;
     CHECK(scrp::Json::parse("\xEF\xBB\xBF{\"name\":\"\\u0421\\u0421\\u0421\\u0420\",\"values\":[true,null,-2.5e2]}", value, &error));
-    CHECK(value["name"].str == u8"СССР");
+    CHECK(value["name"].str == u8"\u0421\u0421\u0421\u0420");
     CHECK(value["values"].at(2).asInt() == -250);
     CHECK(value["missing"].asInt(42) == 42);
     CHECK(scrp::Json::parse("\"\\ud83d\\ude00\"", value, &error));

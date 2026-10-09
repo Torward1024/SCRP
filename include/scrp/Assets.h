@@ -30,14 +30,14 @@ private:
 };
 
 struct SpriteDef {
-    std::string name;     // id из sprites.json — для отладочного вывода
-    std::string file;     // логический путь; файла может ещё не быть
-    int frameW = 16;      // размер одного кадра
+    std::string name;     // registry id used in diagnostics
+    std::string file;     // logical resource path; the file may be absent
+    int frameW = 16;      // dimensions of a single frame
     int frameH = 16;
-    int columns = 1;      // кадров в строке листа (для тайлсета — тайлов)
-    int pivotX = 0;       // точка привязки внутри кадра
+    int columns = 1;      // frames per sheet row, or tiles per tileset row
+    int pivotX = 0;       // anchor point inside the frame
     int pivotY = 0;
-    SDL_Color fallback{ 255, 0, 255, 255 };   // чем рисовать, пока файла нет
+    SDL_Color fallback{ 255, 0, 255, 255 };   // placeholder colour when the resource is missing
 };
 
 struct SpriteSet {
@@ -88,7 +88,7 @@ private:
     bool useColorKey_=true;
 
     std::vector<SDL_Texture*> textures_;
-    std::vector<char> attempted_;   // char, а не bool: vector<bool> — битовое поле
+    std::vector<char> attempted_;   // byte flags; vector<bool> uses packed bits
     int missing_ = 0;
 
     void dropTextures();

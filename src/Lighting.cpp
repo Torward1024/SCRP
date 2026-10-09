@@ -51,7 +51,7 @@ bool Lighting::init(Gfx& gfx) {
 
     target_ = gfx.createTargetTexture(gfx.width(), gfx.height());
     if (!target_) {
-        std::printf("[light] не удалось создать лайтмап: %s — свет отключён\n", SDL_GetError());
+        std::printf("[light] cannot create light map: %s; lighting disabled\n", SDL_GetError());
         return false;
     }
     SDL_SetTextureBlendMode(target_, SDL_BLENDMODE_MOD);
@@ -62,11 +62,11 @@ bool Lighting::init(Gfx& gfx) {
 
     scratch_ = gfx.createTargetTexture(gfx.width(), gfx.height());
     if (!scratch_) {
-        std::printf("[light] нет черновика: %s — тени от стен отключены\n", SDL_GetError());
+        std::printf("[light] cannot create scratch texture: %s; wall shadows disabled\n", SDL_GetError());
     }
 
     if (!buildGlow(gfx)) {
-        std::printf("[light] не удалось собрать градиент: %s — свет отключён\n", SDL_GetError());
+        std::printf("[light] cannot create gradient: %s; lighting disabled\n", SDL_GetError());
         shutdown();
         return false;
     }

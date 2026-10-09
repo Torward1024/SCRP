@@ -14,14 +14,14 @@ bool Decals::init(Gfx& gfx, int levelPxW, int levelPxH) {
 
     if (levelPxW <= 0 || levelPxH <= 0) return false;
     if (levelPxW > config_["max_dimension"].asInt(4096) || levelPxH > config_["max_dimension"].asInt(4096)) {
-        std::printf("[decals] уровень %dx%d больше предела %d — слой следов отключён\n",
+        std::printf("[decals] canvas %dx%d exceeds limit %d; decals disabled\n",
                     levelPxW, levelPxH, config_["max_dimension"].asInt(4096));
         return false;
     }
 
     target_ = gfx.createTargetTexture(levelPxW, levelPxH);
     if (!target_) {
-        std::printf("[decals] не удалось создать текстуру слоя: %s\n", SDL_GetError());
+        std::printf("[decals] cannot create decal texture: %s\n", SDL_GetError());
         return false;
     }
 

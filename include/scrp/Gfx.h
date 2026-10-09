@@ -76,7 +76,7 @@ private:
     float shakeDecay_=0.f, shakeMax_=0.f, focusTravel_=0.3f;
     std::vector<SDL_Color> tileColors_;
 
-    int logicalW_ = 0;    // мировые единицы, не пиксели устройства
+    int logicalW_ = 0;    // world units, independent of device pixels
     int logicalH_ = 0;
     int artScale_ = 1;
 

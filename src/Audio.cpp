@@ -58,7 +58,7 @@ Mix_Chunk* loadChunk(const std::string& path) {
     if (!Vfs::read(path, bytes) || bytes.empty()) return nullptr;
     SDL_RWops* rw = SDL_RWFromConstMem(bytes.data(), static_cast<int>(bytes.size()));
     if (!rw) return nullptr;
-    return Mix_LoadWAV_RW(rw, 1);   // 1 = SDL сам закроет RWops
+    return Mix_LoadWAV_RW(rw, 1);   // the loader takes ownership of RWops
 }
 #endif
 
@@ -97,7 +97,7 @@ void configure(const JsonValue& config) {
 bool init() {
 #ifdef SCRP_USE_SDL_MIXER
     if (Mix_OpenAudio(g_config["sample_rate"].asInt(22050), MIX_DEFAULT_FORMAT, 2, g_config["buffer_size"].asInt(512)) < 0) {
-        std::printf("[audio] устройство не открылось: %s — игра без звука\n", Mix_GetError());
+        std::printf("[audio] cannot open audio device: %s; audio disabled\n", Mix_GetError());
         return false;
     }
     Mix_AllocateChannels(kChannels);
@@ -105,7 +105,7 @@ bool init() {
     g_ready = true;
     return true;
 #else
-    std::printf("[audio] собрано без SDL_mixer — тишина\n");
+    std::printf("[audio] built without SDL_mixer; audio disabled\n");
     return false;
 #endif
 }
@@ -195,7 +195,7 @@ void loadRegistry() {
         }
     }
 
-    std::printf("[audio] записей %zu, файлов загружено %d\n", g_sounds.size(), g_loaded);
+    std::printf("[audio] %zu entries, %d files loaded\n", g_sounds.size(), g_loaded);
 }
 
 void update(float realDt) {
@@ -273,7 +273,7 @@ void emit(const std::string& id, const Vec2* at, float volume, float radius) {
                 victim = i;
             }
         }
-        if (victim < 0) return;   // всё, что играет, важнее — молчим
+        if (victim < 0) return;   // every active voice has higher priority
         Mix_HaltChannel(victim);
         channel = Mix_PlayChannel(victim, chunk, 0);
         if (channel < 0) return;
@@ -314,7 +314,7 @@ void setAmbient(const std::string& id) {
 
     g_ambientChannel = Mix_FadeInChannel(-1, d->chunks[0], -1, g_config["ambient_fade_in_ms"].asInt());
     if (g_ambientChannel >= 0) {
-        g_channelPriority[g_ambientChannel] = 1000;   // фон не вытесняется
+        g_channelPriority[g_ambientChannel] = 1000;   // ambient loops cannot be displaced
         Mix_Volume(g_ambientChannel,
                    static_cast<int>(d->volume * g_master *
                                     g_busVolume[static_cast<int>(Bus::Ambient)] * MIX_MAX_VOLUME));

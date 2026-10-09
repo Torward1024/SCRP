@@ -19,15 +19,15 @@ struct JsonValue {
     bool isArray()  const { return type == Type::Array; }
     bool isObject() const { return type == Type::Object; }
 
-    // Количество элементов массива (или полей объекта)
+    // Number of array elements or object fields.
     size_t size() const;
 
-    // Доступ к полю объекта. Отсутствующее поле возвращает Null-значение,
-    // а не бросает — чтобы разбор карт не превращался в лес проверок.
+    // Object lookup returns a null value for a missing field
+    // rather than throwing an exception.
     const JsonValue& operator[](const char* key) const;
 
-    // Для элементов массива — только at(): operator[] с числовым литералом
-    // неоднозначен (0 подходит и под const char*, и под size_t).
+    // Use at() for array elements: a literal zero would make operator[]
+    // ambiguous between const char* and size_t.
     const JsonValue& at(size_t index) const;
 
     bool has(const char* key) const;
@@ -41,11 +41,11 @@ struct JsonValue {
 };
 
 namespace Json {
-// Обе функции возвращают false и заполняют error при ошибке разбора.
+// Both functions return false and populate error on parse failure.
 bool parse(const std::string& text, JsonValue& out, std::string* error = nullptr);
 
-// Читает через Vfs: путь логический ("data/weapons.json"), а откуда он
-// придёт — из пака, из DLC или из папки разработчика — решает монтирование.
+// Reads a logical asset path through VFS. Mount ordering selects the
+// underlying package, content layer or development directory.
 bool parseAsset(const std::string& path, JsonValue& out, std::string* error = nullptr);
 }
 

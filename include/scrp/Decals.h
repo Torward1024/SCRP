@@ -51,7 +51,7 @@ private:
         SDL_Color color;
         float life = 0.f;
         float maxLife = 1.f;
-        float radius = 0.f;   // 0 = след ноги, иначе круглая отметина
+        float radius = 0.f;   // zero selects a footprint; positive values select a round mark
     };
     std::vector<FadingMark> fading_;
 

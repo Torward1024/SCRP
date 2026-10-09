@@ -33,7 +33,7 @@ void FlowField::rebuild(const Grid& level, int tx, int ty) {
 
     dist_.assign(static_cast<size_t>(width_) * height_, kUnreachable);
     if (tx < 0 || ty < 0 || tx >= width_ || ty >= height_) return;
-    if (level.isWall(tx, ty)) return;   // цель в стене — поля нет
+    if (level.isWall(tx, ty)) return;   // a solid target has no flow field
 
     std::queue<int> open;
     size_t startIndex = static_cast<size_t>(ty) * width_ + tx;
@@ -49,7 +49,7 @@ void FlowField::rebuild(const Grid& level, int tx, int ty) {
         if(dist_[index]>=kUnreachable-1) continue;
         uint16_t next = static_cast<uint16_t>(dist_[index] + 1);
 
-        for (int d = 0; d < 4; ++d) {     // волна идёт только по прямым
+        for (int d = 0; d < 4; ++d) {     // propagate along cardinal neighbours
             int nx = x + kDx[d];
             int ny = y + kDy[d];
             if (nx < 0 || ny < 0 || nx >= width_ || ny >= height_) continue;
@@ -82,7 +82,7 @@ Vec2 FlowField::directionAt(const Grid& level, const Vec2& pos) const {
 
     size_t here = static_cast<size_t>(y) * width_ + x;
     if (dist_[here] == kUnreachable) return { 0.f, 0.f };
-    if (dist_[here] == 0) return { 0.f, 0.f };   // уже пришли
+    if (dist_[here] == 0) return { 0.f, 0.f };   // target reached
 
     int bestX = x, bestY = y;
     uint16_t best = dist_[here];

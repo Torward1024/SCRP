@@ -11,7 +11,7 @@ Facing8 facingFromVec(const Vec2& dir, Facing8 fallback = Facing8::S);
 Vec2 vecFromFacing(Facing8 f);
 
 struct AnimClip {
-    int firstFrame = 0;     // индекс первого кадра в строке
+    int firstFrame = 0;     // first frame index in a row
     int frameCount = 1;
     float fps = 8.f;
     bool loop = true;
@@ -35,7 +35,7 @@ public:
 
     int col() const;
     int row() const;
-    bool flipX() const { return false; }   // зеркальные листы включим здесь, если понадобятся
+    bool flipX() const { return false; }   // reserved for mirrored sprite sheets
 
     bool finished() const { return finished_; }
 

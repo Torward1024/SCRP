@@ -68,10 +68,10 @@ public:
     Parser(const std::string& text) : s_(text) {}
 
     bool parse(JsonValue& out) {
-        // UTF-8 BOM: редакторы под Windows добавляют его сами, и без этого
-        // любой правленый руками файл данных перестаёт разбираться.
-        // Снимаем здесь, а не у вызывающего: текст может прийти откуда угодно —
-        // из файла, из пака, из мода.
+        // Some editors add a UTF-8 BOM. Accept it at the parser boundary
+        // so edited asset files remain valid.
+        // Handle it here because text may come from a directory,
+        // a package or a mod layer.
         if (s_.size() >= 3 && static_cast<unsigned char>(s_[0]) == 0xEF &&
             static_cast<unsigned char>(s_[1]) == 0xBB &&
             static_cast<unsigned char>(s_[2]) == 0xBF) {
@@ -80,7 +80,7 @@ public:
         skipWhitespace();
         if (!parseValue(out)) return false;
         skipWhitespace();
-        if (pos_ != s_.size()) return fail("лишние символы после корневого значения");
+        if (pos_ != s_.size()) return fail("trailing characters after root value");
         return true;
     }
 
@@ -95,7 +95,7 @@ private:
     bool fail(const char* what) {
         if (error_.empty()) {
             char buf[256];
-            std::snprintf(buf, sizeof(buf), "позиция %zu: %s", pos_, what);
+            std::snprintf(buf, sizeof(buf), "position %zu: %s", pos_, what);
             error_ = buf;
         }
         return false;
@@ -121,7 +121,7 @@ private:
     }
 
     bool parseValue(JsonValue& out) {
-        if (eof()) return fail("неожиданный конец файла");
+        if (eof()) return fail("unexpected end of input");
         if (depth_ >= 128) return fail("JSON nesting limit exceeded");
         struct DepthGuard { int& value; ~DepthGuard() { --value; } } guard{depth_};
         ++depth_;
@@ -133,17 +133,17 @@ private:
                 return parseString(out.str);
             }
             case 't':
-                if (!literal("true")) return fail("ожидалось true");
+                if (!literal("true")) return fail("expected true");
                 out.type = JsonValue::Type::Bool;
                 out.boolean = true;
                 return true;
             case 'f':
-                if (!literal("false")) return fail("ожидалось false");
+                if (!literal("false")) return fail("expected false");
                 out.type = JsonValue::Type::Bool;
                 out.boolean = false;
                 return true;
             case 'n':
-                if (!literal("null")) return fail("ожидалось null");
+                if (!literal("null")) return fail("expected null");
                 out.type = JsonValue::Type::Null;
                 return true;
             default:
@@ -159,7 +159,7 @@ private:
 
         for (;;) {
             skipWhitespace();
-            if (eof() || peek() != '"') return fail("ожидалось имя поля в кавычках");
+            if (eof() || peek() != '"') return fail("expected a quoted field name");
 
             std::string key;
             if (!parseString(key)) return false;
@@ -167,7 +167,7 @@ private:
                 if (field.first == key) return fail("Duplicate object key");
 
             skipWhitespace();
-            if (eof() || peek() != ':') return fail("ожидалось ':' после имени поля");
+            if (eof() || peek() != ':') return fail("expected ':' after field name");
             ++pos_;
 
             skipWhitespace();
@@ -175,10 +175,10 @@ private:
             if (!parseValue(out.object.back().second)) return false;
 
             skipWhitespace();
-            if (eof()) return fail("незакрытый объект");
+            if (eof()) return fail("unterminated object");
             if (peek() == ',') { ++pos_; continue; }
             if (peek() == '}') { ++pos_; return true; }
-            return fail("ожидалось ',' или '}'");
+            return fail("expected ',' or '}'");
         }
     }
 
@@ -194,14 +194,14 @@ private:
             if (!parseValue(out.array.back())) return false;
 
             skipWhitespace();
-            if (eof()) return fail("незакрытый массив");
+            if (eof()) return fail("unterminated array");
             if (peek() == ',') { ++pos_; continue; }
             if (peek() == ']') { ++pos_; return true; }
-            return fail("ожидалось ',' или ']'");
+            return fail("expected ',' or ']'");
         }
     }
 
-    // Кодирует code point в UTF-8 — Tiled пишет \uXXXX в именах слоёв и объектов
+    // Encode a Unicode code point as UTF-8; asset names may contain \uXXXX escapes.
     static void appendUtf8(std::string& out, unsigned cp) {
         if (cp < 0x80) {
             out += static_cast<char>(cp);
@@ -221,7 +221,7 @@ private:
     }
 
     bool parseHex4(unsigned& out) {
-        if (pos_ + 4 > s_.size()) return fail("оборванная \\u-последовательность");
+        if (pos_ + 4 > s_.size()) return fail("truncated \\u escape");
         out = 0;
         for (int i = 0; i < 4; ++i) {
             char c = s_[pos_++];
@@ -229,22 +229,22 @@ private:
             if (c >= '0' && c <= '9') out |= static_cast<unsigned>(c - '0');
             else if (c >= 'a' && c <= 'f') out |= static_cast<unsigned>(c - 'a' + 10);
             else if (c >= 'A' && c <= 'F') out |= static_cast<unsigned>(c - 'A' + 10);
-            else return fail("не шестнадцатеричная цифра в \\u");
+            else return fail("non-hexadecimal digit in \\u escape");
         }
         return true;
     }
 
     bool parseString(std::string& out) {
-        ++pos_; // открывающая кавычка
+        ++pos_; // opening quote
         out.clear();
         while (true) {
-            if (eof()) return fail("незакрытая строка");
+            if (eof()) return fail("unterminated string");
             char c = s_[pos_++];
             if (c == '"') return true;
             if (static_cast<unsigned char>(c) < 0x20) return fail("Unescaped control character");
             if (c != '\\') { out += c; continue; }
 
-            if (eof()) return fail("оборванная escape-последовательность");
+            if (eof()) return fail("truncated escape sequence");
             char e = s_[pos_++];
             switch (e) {
                 case '"':  out += '"';  break;
@@ -258,7 +258,7 @@ private:
                 case 'u': {
                     unsigned cp = 0;
                     if (!parseHex4(cp)) return false;
-                    // Суррогатная пара
+                    // Surrogate pair
                     if (cp >= 0xD800 && cp <= 0xDBFF) {
                         if (pos_ + 1 >= s_.size() || s_[pos_] != '\\' || s_[pos_ + 1] != 'u')
                             return fail("Missing low surrogate");
@@ -274,7 +274,7 @@ private:
                     appendUtf8(out, cp);
                     break;
                 }
-                default: return fail("неизвестная escape-последовательность");
+                default: return fail("unknown escape sequence");
             }
         }
     }
@@ -322,7 +322,7 @@ bool parse(const std::string& text, JsonValue& out, std::string* error) {
 bool parseAsset(const std::string& path, JsonValue& out, std::string* error) {
     std::string text;
     if (!Vfs::readText(path, text)) {
-        if (error) *error = "нет ресурса: " + path;
+        if (error) *error = "missing resource: " + path;
         return false;
     }
 

@@ -57,7 +57,7 @@ void Gfx::centerCameraOn(const Vec2& target, int levelPxW, int levelPxH) {
 
     if (focusTime_ > 0.f && focusMaxTime_ > 0.f) {
         float passed = 1.f - focusTime_ / focusMaxTime_;   // 0 -> 1
-        const float kTravel = focusTravel_;                    // разгон и возврат
+        const float kTravel = focusTravel_;                    // transition in and out of the focus point
         float k = passed < kTravel        ? passed / kTravel
                 : passed > 1.f - kTravel  ? (1.f - passed) / kTravel
                                           : 1.f;

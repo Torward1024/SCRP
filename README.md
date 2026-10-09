@@ -1,40 +1,40 @@
 # SCRP
 
-SCRP — мой C++17 / SDL2 движок для воссоздания старых игр. Название от
-**scrap** — обрывки, старое и потрёпанное. Я выделил общие системы из
-Scrapheart и подключил FirstDawn к тому же движку.
+SCRP is my C++17 / SDL2 engine for recreating classic games. The name comes from
+**scrap**: fragments of something old and worn. I extracted the shared systems
+from Scrapheart and connected FirstDawn to the same engine.
 
-[Torward1024/SCRP](https://github.com/Torward1024/SCRP) — единственный
-исходный репозиторий движка. Правила и оригинальные ресурсы игр остаются
-в проектах-потребителях. Привязки ресурсов и настройки задаются через JSON.
+[Torward1024/SCRP](https://github.com/Torward1024/SCRP) is the single source repository
+for the engine. Game rules and original resources belong to the consumer projects.
+Resource bindings and runtime settings are supplied through JSON.
 
-## Модули
+## Modules
 
-| Target | Возможности | Зависимость |
+| Target | Features | Dependencies |
 |---|---|---|
-| `SCRP::Core` | JSON/XML/VFS, конфигурация, индексные изображения/BMP, математика/RNG, анимация, события/сигналы/статы, сетка/коллизии/видимость, flow field/A*, сохранения, шаг времени | C++17 |
-| `SCRP::SDL2` | Окно, пиксельный вывод, спрайты/роли, камера/рендер, ввод, микрошрифт, свет, частицы и следы | SDL2; SDL2_image опционально |
-| `SCRP::Audio` | Реестр звуков, каналы/приоритеты, пространственный звук, фон и музыка | SDL2; SDL2_mixer опционально |
+| `SCRP::Core` | JSON/XML/VFS, configuration, indexed images/BMP, vectors/RNG, animation, events/signals/stats, grid collision/visibility, flow fields/A*, saves, fixed steps | C++17 |
+| `SCRP::SDL2` | Windows, pixel output, sprite registries/roles, drawing/camera, input, microfont, lighting, particles and decals | SDL2; optional SDL2_image |
+| `SCRP::Audio` | Sound registry, channels/priorities, spatial audio, ambient loops and music | SDL2; optional SDL2_mixer |
 
-Core не зависит от SDL или игровых классов. Игра передаёт сетку проходимости,
-имена действий и JSON-настройки; движок не знает конкретных врагов, оружия,
-клавиш или файлов игры. Монтирования и SDL-ресурсы используются в основном потоке.
+Core has no SDL or game dependencies. A game supplies its solid grid, action names
+and JSON settings. The engine does not know specific enemies, weapons, keys or
+game files. Resource mounts and SDL objects are managed on the main thread.
 
-## Структура
+## Layout
 
 ```text
-include/scrp/       публичный API
-src/               реализации общих систем
-tests/             независимые Core/SDL/ bootstrap проверки
-tools/             синхронизация зависимости в играх
-docs/              архитектура и подключение
-build.ps1          Windows-сборка Core и тесты
-CMakeLists.txt     переносимая сборка модулей
+include/scrp/       public API
+src/               shared implementations
+tests/             independent Core, SDL and bootstrap tests
+tools/             consumer dependency synchronization
+docs/              architecture and integration
+build.ps1          Windows Core build and tests
+CMakeLists.txt     portable module builds
 ```
 
-## Сборка
+## Build
 
-На Windows используется MSYS2 UCRT64, как в Scrapheart и FirstDawn.
+Windows uses MSYS2 UCRT64, as do Scrapheart and FirstDawn.
 
 ```powershell
 .\build.ps1
@@ -42,8 +42,8 @@ CMakeLists.txt     переносимая сборка модулей
 .\build.ps1 -Test -SDLTest
 ```
 
-Последняя команда проверяет SDL2 и SDL2_mixer без видимого окна и оригинальных
-ресурсов. CMake позволяет выбрать зависимости:
+The last command tests SDL2 and SDL2_mixer without a visible window or original
+game assets. CMake lets consumers select optional dependencies:
 
 ```sh
 cmake -S . -B build/cmake -DSCRP_WITH_SDL2=ON -DSCRP_USE_SDL_MIXER=ON
@@ -51,29 +51,29 @@ cmake --build build/cmake
 ctest --test-dir build/cmake --output-on-failure
 ```
 
-Для PNG добавляем `-DSCRP_USE_SDL_IMAGE=ON`. Для инструментов без SDL используем
-`-DSCRP_WITH_SDL2=OFF`. CI проверяет Core, SDL и синхронизацию на Windows/Linux.
+Add `-DSCRP_USE_SDL_IMAGE=ON` for PNG sprites. Use `-DSCRP_WITH_SDL2=OFF` for tools
+that need only Core. CI tests the engine and bootstrap on Windows and Linux.
 
-## Подключение
+## Integration
 
 ```cmake
 add_subdirectory("${SCRP_ENGINE_DIR}" scrp)
 target_link_libraries(my_game PRIVATE SCRP::Core SCRP::SDL2)
-# При необходимости звука: SCRP::Audio
+# Link SCRP::Audio when audio is needed.
 ```
 
-Каждая игра хранит полный SHA в `scrp.lock.json`. Обычная сборка автоматически
-получает этот коммит в игнорируемую папку `engine/SCRP/`. Самостоятельных
-реализаций ядра в играх нет. Для перехода на свежий `main` в каталоге игры:
+Each game pins a full commit SHA in `scrp.lock.json`. Normal builds automatically
+resolve that commit into an ignored `engine/SCRP/` clone. Games contain no separate
+engine implementation. To adopt the latest remote main, run from the game root:
 
 ```sh
 python tools/sync_engine.py --update
 ```
 
-После этого выполняем сборку/тесты и коммитим lock-файл. Для проверки рабочих
-изменений в `E:\Dev\SCRP` используем явный `-EngineDir` / `SCRP_ENGINE_DIR`.
-Обычная сборка не выбирает соседний checkout и не меняет его файлы или ветку.
+Then build/test the consumer and commit its lock file. To test local engine work
+in `E:\Dev\SCRP`, explicitly use `-EngineDir` or `SCRP_ENGINE_DIR`. Normal builds
+never select or modify a sibling development checkout.
 
-Подробнее: [архитектура и JSON](docs/ARCHITECTURE.md),
-[версии и синхронизация](docs/DEPENDENCIES.md). API версии 0.2 развивается;
-новые общие возможности добавляю здесь, игровые правила — в соответствующей игре.
+See [architecture and JSON](docs/ARCHITECTURE.md) and
+[dependency versions](docs/DEPENDENCIES.md). The 0.2 API is evolving. I add shared
+capabilities here and game rules in the corresponding consumer project.
