@@ -39,3 +39,13 @@ and never deletes an existing save when atomic replacement fails.
 The example consumer configuration is maintained in Scrapheart, rather than
 distributed as built-in game data in SCRP. Original game assets stay in consumers'
 local resource directories and never enter this repository.
+
+Decoded image adapters can inject IndexedImage data through Assets::setIndexedImage.
+Atlas rectangles remain application JSON; Gfx::drawRegionScreen accepts pixel regions.
+Gfx::captureBmp captures before presentation. Captures of licensed assets stay local.
+Json::stringify supplies locale-independent, bounded save serialization; SaveStore
+still handles atomic writes. Game state and save schema belong to each consumer.
+
+Json::uint64Value and Json::readUInt64 preserve unsigned 64-bit counters as decimal
+JSON strings; safe numeric inputs up to 9007199254740991 are accepted. JsonValue::contains
+includes explicit null fields, while has keeps its existing non-null semantics.

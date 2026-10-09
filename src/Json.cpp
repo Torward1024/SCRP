@@ -5,6 +5,8 @@
 #include <charconv>
 #include <cmath>
 #include <limits>
+#include <functional>
+#include <unordered_set>
 
 namespace scrp {
 
@@ -32,6 +34,11 @@ const JsonValue& JsonValue::at(size_t index) const {
     return array[index];
 }
 
+bool JsonValue::contains(const char* key) const {
+    if (!isObject()) return false;
+    for (const auto& field : object) if (field.first == key) return true;
+    return false;
+}
 bool JsonValue::has(const char* key) const {
     return !(*this)[key].isNull();
 }
@@ -331,6 +338,75 @@ bool parseAsset(const std::string& path, JsonValue& out, std::string* error) {
         return false;
     }
     return true;
+}
+
+JsonValue uint64Value(uint64_t value) {
+    JsonValue result; result.type = JsonValue::Type::String;
+    result.str = std::to_string(value); return result;
+}
+bool readUInt64(const JsonValue& value, uint64_t& out) {
+    if (value.type == JsonValue::Type::Number) {
+        if (!std::isfinite(value.number) || std::floor(value.number) != value.number ||
+            value.number < 0 || value.number > 9007199254740991.0) return false;
+        out = static_cast<uint64_t>(value.number); return true;
+    }
+    if (value.type != JsonValue::Type::String || value.str.empty()) return false;
+    uint64_t next;
+    const auto parsed = std::from_chars(value.str.data(), value.str.data() + value.str.size(), next);
+    if (parsed.ec != std::errc{} || parsed.ptr != value.str.data() + value.str.size()) return false;
+    out = next; return true;
+}
+
+bool stringify(const JsonValue& value, std::string& out, std::string* error) {
+    std::string next, reason;
+    auto quote = [&](const std::string& text) {
+        constexpr char hex[] = "0123456789abcdef";
+        next += '"';
+        for (unsigned char c : text) {
+            if (c == '"' || c == '\\') { next += '\\'; next += char(c); }
+            else if (c < 32) { next += "\\u00"; next += hex[c >> 4]; next += hex[c & 15]; }
+            else next += char(c);
+        }
+        next += '"';
+    };
+    std::function<bool(const JsonValue&, int)> emit = [&](const JsonValue& node, int depth) {
+        if (depth >= 128) { reason = "JSON nesting limit exceeded"; return false; }
+        switch (node.type) {
+        case JsonValue::Type::Null: next += "null"; break;
+        case JsonValue::Type::Bool: next += node.boolean ? "true" : "false"; break;
+        case JsonValue::Type::Number: {
+            if (!std::isfinite(node.number)) { reason = "Non-finite JSON number"; return false; }
+            char buffer[64];
+            const auto result = std::to_chars(buffer, buffer + sizeof buffer, node.number,
+                                              std::chars_format::general, std::numeric_limits<double>::max_digits10);
+            if (result.ec != std::errc{}) { reason = "JSON number formatting failed"; return false; }
+            next.append(buffer, result.ptr); break;
+        }
+        case JsonValue::Type::String: quote(node.str); break;
+        case JsonValue::Type::Array:
+            next += '[';
+            for (size_t i = 0; i < node.array.size(); ++i) {
+                if (i) next += ',';
+                if (!emit(node.array[i], depth + 1)) return false;
+            }
+            next += ']'; break;
+        case JsonValue::Type::Object: {
+            next += '{'; std::unordered_set<std::string> names;
+            for (size_t i = 0; i < node.object.size(); ++i) {
+                const auto& field = node.object[i];
+                if (!names.insert(field.first).second) { reason = "Duplicate JSON field"; return false; }
+                if (i) next += ',';
+                quote(field.first); next += ':';
+                if (!emit(field.second, depth + 1)) return false;
+            }
+            next += '}'; break;
+        }
+        default: reason = "Invalid JSON value type"; return false;
+        }
+        return true;
+    };
+    if (!emit(value, 0)) { if (error) *error = reason; return false; }
+    out = std::move(next); if (error) error->clear(); return true;
 }
 
 } // namespace Json

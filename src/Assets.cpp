@@ -242,4 +242,28 @@ void Assets::configure(const JsonValue& config) {
     useColorKey_=!config["color_key"].isNull(); colorKey_=readColor(config["color_key"]);
 }
 SpriteId Assets::role(const std::string& name) const { return find(roles_[name.c_str()].asString()); }
+bool Assets::setIndexedImage(SpriteId id, const IndexedImage& image, int transparentIndex, std::string* error) {
+    const int index = id.index();
+    auto fail = [&](const std::string& reason) { if (error) *error = reason; return false; };
+    if (!renderer_ || index < 0 || index >= static_cast<int>(textures_.size()) ||
+        !image.valid() || transparentIndex < -1 || transparentIndex > 255)
+        return fail("Invalid indexed texture upload");
+    auto pixels = image.rgba();
+    if (transparentIndex >= 0)
+        for (size_t i = 0; i < image.pixels.size(); ++i)
+            if (image.pixels[i] == transparentIndex) pixels[i * 4 + 3] = 0;
+    SDL_Texture* next = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32,
+                                         SDL_TEXTUREACCESS_STATIC, image.width, image.height);
+    if (!next) return fail(SDL_GetError());
+    if (SDL_UpdateTexture(next, nullptr, pixels.data(), image.width * 4) != 0 ||
+        SDL_SetTextureBlendMode(next, SDL_BLENDMODE_BLEND) != 0 ||
+        SDL_SetTextureScaleMode(next, SDL_ScaleModeNearest) != 0) {
+        const std::string reason = SDL_GetError(); SDL_DestroyTexture(next); return fail(reason);
+    }
+    if (attempted_[index] && !textures_[index] && missing_ > 0) --missing_;
+    if (textures_[index]) SDL_DestroyTexture(textures_[index]);
+    textures_[index] = next; attempted_[index] = 1;
+    if (error) error->clear();
+    return true;
+}
 } // namespace scrp

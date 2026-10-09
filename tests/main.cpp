@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <limits>
 
 namespace fs = std::filesystem;
 namespace {
@@ -32,6 +33,32 @@ void jsonTests() {
     CHECK(value.asInt(7) == 7);
 }
 
+void serializationTests() {
+    scrp::JsonValue nullable;
+    CHECK(scrp::Json::parse("{\"limit\":null}", nullable));
+    CHECK(nullable.contains("limit") && !nullable.has("limit"));
+    CHECK(!nullable.contains("missing"));
+    uint64_t count = 0;
+    const auto maximum = scrp::Json::uint64Value(std::numeric_limits<uint64_t>::max());
+    CHECK(scrp::Json::readUInt64(maximum, count));
+    CHECK(count == std::numeric_limits<uint64_t>::max());
+    auto overflow = maximum; overflow.str += "0"; CHECK(!scrp::Json::readUInt64(overflow, count));
+    overflow.str = "-1"; CHECK(!scrp::Json::readUInt64(overflow, count));
+    overflow.type = scrp::JsonValue::Type::Number; overflow.number = 9007199254740992.0;
+    CHECK(!scrp::Json::readUInt64(overflow, count));
+    scrp::JsonValue value, again; std::string output = "unchanged", error;
+    CHECK(scrp::Json::parse(R"({"name":"a\"b\\c\n\u0000\ud83d\ude00","items":[null,true,-0.5,1e30]})", value, &error));
+    CHECK(scrp::Json::stringify(value, output, &error));
+    CHECK(scrp::Json::parse(output, again, &error));
+    CHECK(again["name"].str == value["name"].str);
+    CHECK(again["items"].at(3).number == value["items"].at(3).number);
+    value.type = scrp::JsonValue::Type::Number; value.number = std::numeric_limits<double>::infinity();
+    output = "unchanged"; CHECK(!scrp::Json::stringify(value, output, &error)); CHECK(output == "unchanged");
+    value.type = scrp::JsonValue::Type::Object; value.object = {{"x", {}}, {"x", {}}};
+    CHECK(!scrp::Json::stringify(value, output, &error));
+    value = {}; for (int i = 0; i < 130; ++i) { scrp::JsonValue next; next.type = scrp::JsonValue::Type::Array; next.array.push_back(std::move(value)); value = std::move(next); }
+    CHECK(!scrp::Json::stringify(value, output, &error));
+}
 void vfsTests() {
     const fs::path root = fs::temp_directory_path()/
         ("scrp-tests-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -89,6 +116,6 @@ void vfsTests() {
 }
 }
 int main() {
-    try { jsonTests(); vfsTests(); std::cout << "SCRP: " << checks << " checks passed\n"; return 0; }
+    try { jsonTests(); serializationTests(); vfsTests(); std::cout << "SCRP: " << checks << " checks passed\n"; return 0; }
     catch (const std::exception& e) { std::cerr << "SCRP test failure: " << e.what() << '\n'; return 1; }
 }

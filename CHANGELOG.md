@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Serialize JSON values for application saves with bounded nesting and stable numeric formatting.
+- Preserve exact unsigned 64-bit counters through decimal strings; distinguish explicit null fields from missing fields.
+- Upload decoded indexed images into sprite registries; games own their decoders.
+- Draw arbitrary atlas regions and capture rendered frames for local verification.
+
 ## 0.2.0 - 2026-10-09
 
 - Extracted the reusable C++17 runtime: configuration/manifests, animation,

@@ -43,6 +43,20 @@ int main() {
     gfx.beginFrame();gfx.drawSprite(gfx.assets().role("hero"),{4,4});gfx.drawTile({},0,0,0,8);
     std::array<Uint8,32*24*4> pixels{};CHECK(SDL_RenderReadPixels(window.renderer(),nullptr,SDL_PIXELFORMAT_RGBA32,pixels.data(),32*4)==0);
     CHECK(pixels[0]==1&&pixels[1]==2&&pixels[2]==3);
+    IndexedImage decoded; decoded.width=2; decoded.height=2; decoded.pixels={0,1,1,0};
+    decoded.palette[0]={255,0,0,255}; decoded.palette[1]={0,255,0,255};
+    const auto injected=gfx.assets().find("synthetic");
+    CHECK(gfx.assets().setIndexedImage(injected,decoded,0));
+    CHECK(!gfx.assets().setIndexedImage({},decoded));
+    gfx.beginFrame({0,0,255,255});
+    CHECK(gfx.drawRegionScreen(injected,{0,0,2,2},{0,0,2,2}));
+    CHECK(!gfx.drawRegionScreen(injected,{1,0,2,2},{0,0,2,2}));
+    CHECK(SDL_RenderReadPixels(window.renderer(),nullptr,SDL_PIXELFORMAT_RGBA32,pixels.data(),32*4)==0);
+    CHECK(pixels[0]==0&&pixels[2]==255&&pixels[4]==0&&pixels[5]==255);
+    CHECK(!gfx.assets().setIndexedImage(injected,IndexedImage{}));
+    CHECK(gfx.assets().hasTexture(injected));
+    CHECK(gfx.captureBmp((temporary/"capture.bmp").u8string()));
+    CHECK(std::filesystem::file_size(temporary/"capture.bmp")>32*24);
     Decals decals;decals.configure(parse(R"({"max_dimension":64,"max_fading":2,"recipes":{"mark":{"rects":[{"x":0,"y":0,"w":2,"h":2,"color":[255,0,0,255]}]}}})"));
     CHECK(decals.init(gfx,32,24));decals.stampRecipe("mark",{10,10},Col::White);CHECK(decals.stampCount()==1);
     for(int i=0;i<4;++i) {decals.addFadingFootprint({4,4},{1,0},Col::White,.1f);}

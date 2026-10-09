@@ -26,6 +26,12 @@ public:
     int deviceWidth()  const { return logicalW_ * artScale_; }
     int deviceHeight() const { return logicalH_ * artScale_; }
 
+    // Source rectangles are texture pixels; destinations are logical screen pixels.
+    bool drawRegionScreen(SpriteId id, const SDL_Rect& source, const SDL_Rect& destination,
+                          SDL_Color tint = Col::White);
+    // Capture the current frame before endFrame. Destination is application-owned.
+    bool captureBmp(const std::string& filename, std::string* error = nullptr);
+
     void beginFrame(SDL_Color clear = Col::Black);
     void endFrame();
 

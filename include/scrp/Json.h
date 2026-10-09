@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <cstdint>
 #include <vector>
 #include <utility>
 
@@ -30,6 +31,8 @@ struct JsonValue {
     // ambiguous between const char* and size_t.
     const JsonValue& at(size_t index) const;
 
+    // contains includes explicit null fields; has retains its non-null semantics.
+    bool contains(const char* key) const;
     bool has(const char* key) const;
 
     double      asNumber(double def = 0.0) const;
@@ -41,6 +44,11 @@ struct JsonValue {
 };
 
 namespace Json {
+// Exact unsigned counters use decimal JSON strings; safe numeric inputs also work.
+JsonValue uint64Value(uint64_t value);
+bool readUInt64(const JsonValue& value, uint64_t& out);
+// Serialize a value for saves/content. On failure, out is left unchanged.
+bool stringify(const JsonValue& value, std::string& out, std::string* error = nullptr);
 // Both functions return false and populate error on parse failure.
 bool parse(const std::string& text, JsonValue& out, std::string* error = nullptr);
 

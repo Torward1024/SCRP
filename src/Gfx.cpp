@@ -2,6 +2,7 @@
 #include "scrp/Rng.h"
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 namespace scrp {
 namespace {
@@ -338,5 +339,40 @@ void Gfx::configure(const JsonValue& config) {
     shakeMax_=std::max(0.f,static_cast<float>(config["shake_max"].asNumber()));
     focusTravel_=std::clamp(static_cast<float>(config["focus_travel"].asNumber(0.3)),0.001f,0.5f);
     tileColors_.clear(); for(const auto& color:config["tile_colors"].array) tileColors_.push_back(readColor(color));
+}
+bool Gfx::drawRegionScreen(SpriteId id, const SDL_Rect& source, const SDL_Rect& destination, SDL_Color tint) {
+    SDL_Texture* texture = assets_.texture(id);
+    int w = 0, h = 0;
+    if (!renderer_ || !texture || source.x < 0 || source.y < 0 || source.w <= 0 || source.h <= 0 ||
+        destination.w <= 0 || destination.h <= 0 || SDL_QueryTexture(texture, nullptr, nullptr, &w, &h) != 0 ||
+        source.w > w || source.h > h || source.x > w - source.w || source.y > h - source.h) {
+        SDL_SetError("Invalid sprite region"); return false;
+    }
+    for (int component : {destination.x, destination.y, destination.w, destination.h}) {
+        const int64_t scaled = int64_t(component) * artScale_;
+        if (scaled < std::numeric_limits<int>::min() || scaled > std::numeric_limits<int>::max()) {
+            SDL_SetError("Sprite destination overflow"); return false;
+        }
+    }
+    SDL_Rect dst{destination.x * artScale_, destination.y * artScale_,
+                 destination.w * artScale_, destination.h * artScale_};
+    SDL_SetTextureColorMod(texture, tint.r, tint.g, tint.b); SDL_SetTextureAlphaMod(texture, tint.a);
+    const bool ok = SDL_RenderCopy(renderer_, texture, &source, &dst) == 0;
+    SDL_SetTextureColorMod(texture, 255, 255, 255); SDL_SetTextureAlphaMod(texture, 255);
+    return ok;
+}
+
+bool Gfx::captureBmp(const std::string& filename, std::string* error) {
+    int w = 0, h = 0;
+    if (!renderer_ || SDL_GetRendererOutputSize(renderer_, &w, &h) != 0 || w <= 0 || h <= 0) {
+        if (error) *error = "No renderer to capture";
+        return false;
+    }
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_RGBA32);
+    if (!surface) { if (error) *error = SDL_GetError(); return false; }
+    const bool ok = SDL_RenderReadPixels(renderer_, nullptr, surface->format->format, surface->pixels, surface->pitch) == 0 &&
+                    SDL_SaveBMP(surface, filename.c_str()) == 0;
+    if (!ok && error) *error = SDL_GetError();
+    SDL_FreeSurface(surface); return ok;
 }
 } // namespace scrp

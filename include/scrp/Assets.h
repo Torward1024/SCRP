@@ -1,6 +1,7 @@
 #pragma once
 #include <SDL.h>
 #include "scrp/Json.h"
+#include "scrp/IndexedImage.h"
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -68,6 +69,11 @@ public:
     SDL_Texture* texture(SpriteId id);
 
     bool hasTexture(SpriteId id);
+    // Upload a decoded game-format image into a configured registry entry.
+    // -1 keeps palette alpha; 0..255 makes only that index transparent.
+    // Reload drops injected textures; the application must upload them again.
+    bool setIndexedImage(SpriteId id, const IndexedImage& image, int transparentIndex = -1,
+                         std::string* error = nullptr);
 
     void reload();
 
