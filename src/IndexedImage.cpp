@@ -30,24 +30,35 @@ std::vector<uint8_t> IndexedImage::rgba() const {
     }
     return result;
 }
-bool IndexedImage::writeBmp(const std::string& path, std::string& error) const {
-    if (!valid()) { error = "Invalid indexed image"; return false; }
-    std::ofstream file(std::filesystem::u8path(path), std::ios::binary);
-    if (!file) { error = "Cannot create BMP: " + path; return false; }
+std::vector<uint8_t> IndexedImage::bmp() const {
+    std::vector<uint8_t> out;
+    if (!valid()) return out;
     const uint32_t stride = (uint32_t(width)*3+3) & ~3u;
-    auto le = [&file](uint32_t v, int count) {
-        for (int i = 0; i < count; ++i) file.put(char((v >> (i*8)) & 255));
+    out.reserve(54 + size_t(stride)*height);
+    auto le = [&out](uint32_t v, int count) {
+        for (int i = 0; i < count; ++i) out.push_back(uint8_t((v >> (i*8)) & 255));
     };
-    file.write("BM", 2); le(54+stride*height, 4); le(0,4); le(54,4);
-    le(40,4); le(width,4); le(height,4); le(1,2); le(24,2);
+    out.push_back('B'); out.push_back('M');
+    le(54+stride*height, 4); le(0,4); le(54,4);
+    le(40,4); le(uint32_t(width),4); le(uint32_t(height),4); le(1,2); le(24,2);
     le(0,4); le(stride*height,4); le(0,4); le(0,4); le(0,4); le(0,4);
     for (int y = height-1; y >= 0; --y) {
         for (int x = 0; x < width; ++x) {
             const auto c = palette[pixels[size_t(y)*width+x]];
-            file.put(char(c.b)); file.put(char(c.g)); file.put(char(c.r));
+            out.push_back(c.b); out.push_back(c.g); out.push_back(c.r);
         }
-        for (uint32_t i = width*3; i < stride; ++i) file.put(0);
+        for (uint32_t i = uint32_t(width)*3; i < stride; ++i) out.push_back(0);
     }
+    return out;
+}
+
+bool IndexedImage::writeBmp(const std::string& path, std::string& error) const {
+    if (!valid()) { error = "Invalid indexed image"; return false; }
+    std::ofstream file(std::filesystem::u8path(path), std::ios::binary);
+    if (!file) { error = "Cannot create BMP: " + path; return false; }
+    const std::vector<uint8_t> bytes = bmp();
+    file.write(reinterpret_cast<const char*>(bytes.data()),
+               static_cast<std::streamsize>(bytes.size()));
     file.flush();
     if (!file) { error = "Cannot write BMP: " + path; return false; }
     return true;

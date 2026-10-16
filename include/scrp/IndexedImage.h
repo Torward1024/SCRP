@@ -15,6 +15,10 @@ struct IndexedImage {
     Palette palette = diagnosticPalette();
     bool valid() const;
     std::vector<uint8_t> rgba() const;
+    // The same 24-bit BMP writeBmp produces, as bytes. Needed when the
+    // image goes into a package rather than onto disk; writeBmp is a thin
+    // wrapper so the two cannot drift.
+    std::vector<uint8_t> bmp() const;
     bool writeBmp(const std::string& path, std::string& error) const;
 };
 } // namespace scrp
