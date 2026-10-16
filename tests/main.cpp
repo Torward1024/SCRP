@@ -3,6 +3,7 @@
 #include "scrp/Utf8.h"
 #include "scrp/Vfs.h"
 #include "scrp/IndexedImage.h"
+#include "scrp/Rnc.h"
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -158,8 +159,52 @@ void vfsTests() {
     CHECK(image.writeBmp((root/"image.bmp").u8string(), error));
     CHECK(fs::file_size(root/"image.bmp") == 58);
 }
+
+void rncTests() {
+    // Standard check value for CRC-16/ARC, independent of any game data.
+    const std::string digits = "123456789";
+    CHECK(scrp::Rnc::crc16(reinterpret_cast<const uint8_t*>(digits.data()), digits.size()) == 0xBB3D);
+
+    // A synthetic method 1 stream: one block, one pair, a five byte literal
+    // run and no match. Built by tools, never taken from original assets,
+    // so this test can run anywhere including CI.
+    const std::vector<uint8_t> packed = {
+        0x52, 0x4E, 0x43, 0x01, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x0D,
+        0x4B, 0xF5, 0x7B, 0x51, 0x00, 0x00, 0x10, 0x11, 0x11, 0x00, 0x02, 0x00,
+        0x0E, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55,
+    };
+    const std::vector<uint8_t> payload = {0x11, 0x22, 0x33, 0x44, 0x55};
+
+    CHECK(scrp::Rnc::isPacked(packed.data(), packed.size()));
+    scrp::RncHeader header;
+    CHECK(scrp::Rnc::readHeader(packed.data(), packed.size(), header));
+    CHECK(header.method == 1);
+    CHECK(header.unpackedSize == payload.size());
+    CHECK(header.unpackedCrc == scrp::Rnc::crc16(payload.data(), payload.size()));
+
+    std::vector<uint8_t> out;
+    std::string error;
+    CHECK(scrp::Rnc::unpack(packed.data(), packed.size(), out, &error));
+    CHECK(error.empty());
+    CHECK(out == payload);
+
+    // A damaged payload must be rejected rather than returned: the whole
+    // point of checking the header checksum.
+    std::vector<uint8_t> broken = packed;
+    broken.back() ^= 0xFF;
+    CHECK(!scrp::Rnc::unpack(broken.data(), broken.size(), out, &error));
+    CHECK(!error.empty());
+
+    // Truncation must not read past the buffer.
+    CHECK(!scrp::Rnc::unpack(packed.data(), packed.size() - 4, out, &error));
+
+    // Plain data passes through, since real sets mix packed and plain files.
+    CHECK(scrp::Rnc::unpackIfPacked(payload.data(), payload.size(), out, &error));
+    CHECK(out == payload);
+    CHECK(!scrp::Rnc::isPacked(payload.data(), payload.size()));
+}
 }
 int main() {
-    try { jsonTests(); serializationTests(); vfsTests(); utf8Tests(); localizationTests(); std::cout << "SCRP: " << checks << " checks passed\n"; return 0; }
+    try { jsonTests(); serializationTests(); vfsTests(); utf8Tests(); localizationTests(); rncTests(); std::cout << "SCRP: " << checks << " checks passed\n"; return 0; }
     catch (const std::exception& e) { std::cerr << "SCRP test failure: " << e.what() << '\n'; return 1; }
 }
