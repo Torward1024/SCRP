@@ -14,7 +14,7 @@ $toolchainBin = Split-Path $compiler
 $env:PATH = $toolchainBin + ';' + $env:PATH
 $flags = @('-std=c++17', '-Wall', '-Wextra', '-Wpedantic', "-I$root\include")
 if ($Release) { $flags += @('-O2', '-DNDEBUG') } else { $flags += @('-g', '-O0') }
-$sources = @('Json','Localization','Vfs','IndexedImage','Config','Xml','Anim','Grid','FlowField','PathFinder','SaveStore','Rnc') | ForEach-Object { Join-Path $root "src\$_.cpp" }
+$sources = @('Json','Localization','Vfs','IndexedImage','Config','Xml','Anim','Grid','FlowField','PathFinder','SaveStore','Rnc','PackWriter') | ForEach-Object { Join-Path $root "src\$_.cpp" }
 if ($Test) {
     $testExe = Join-Path $outputDir 'scrp_tests.exe'
     & $compiler @flags @sources (Join-Path $root 'tests\main.cpp') '-o' $testExe

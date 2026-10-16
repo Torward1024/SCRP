@@ -4,6 +4,7 @@
 #include "scrp/Vfs.h"
 #include "scrp/IndexedImage.h"
 #include "scrp/Rnc.h"
+#include "scrp/PackWriter.h"
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -203,8 +204,55 @@ void rncTests() {
     CHECK(out == payload);
     CHECK(!scrp::Rnc::isPacked(payload.data(), payload.size()));
 }
+
+void packWriterTests() {
+    const fs::path root = fs::temp_directory_path() /
+        ("scrp-pack-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root);
+    const std::string packPath = (root / "fixture.scrap").u8string();
+
+    {
+        scrp::PackWriter writer;
+        std::string error;
+        CHECK(writer.open(packPath, &error));
+        CHECK(writer.add("data/a.txt", std::string("hello"), &error));
+        CHECK(writer.add("maps/b.json", std::string("{\"ok\":true}"), &error));
+        // Awkward paths are rejected when written, not when loaded.
+        CHECK(!writer.add("/leading", std::string("x"), &error));
+        CHECK(!writer.add(std::string("back") + char(92) + "slash", std::string("x"), &error));
+        CHECK(!writer.add("up/../out", std::string("x"), &error));
+        CHECK(!writer.add("data/a.txt", std::string("again"), &error));
+        CHECK(writer.entryCount() == 2);
+        CHECK(writer.finish(&error));
+        CHECK(error.empty());
+        // Finishing twice is a mistake worth reporting.
+        CHECK(!writer.finish(&error));
+    }
+
+    scrp::Vfs::unmountAll();
+    CHECK(scrp::Vfs::mountPack(packPath));
+    std::string text;
+    CHECK(scrp::Vfs::readText("data/a.txt", text));
+    CHECK(text == "hello");
+    CHECK(scrp::Vfs::readText("maps/b.json", text));
+    CHECK(text == "{\"ok\":true}");
+    CHECK(!scrp::Vfs::exists("missing"));
+    scrp::Vfs::unmountAll();
+
+    // A damaged blob must be refused by the checksum rather than returned.
+    {
+        std::fstream f(packPath, std::ios::binary | std::ios::in | std::ios::out);
+        f.seekp(20);
+        f.put('H');
+    }
+    CHECK(scrp::Vfs::mountPack(packPath));
+    CHECK(!scrp::Vfs::readText("data/a.txt", text));
+    scrp::Vfs::unmountAll();
+
+    fs::remove_all(root);
+}
 }
 int main() {
-    try { jsonTests(); serializationTests(); vfsTests(); utf8Tests(); localizationTests(); rncTests(); std::cout << "SCRP: " << checks << " checks passed\n"; return 0; }
+    try { jsonTests(); serializationTests(); vfsTests(); utf8Tests(); localizationTests(); rncTests(); packWriterTests(); std::cout << "SCRP: " << checks << " checks passed\n"; return 0; }
     catch (const std::exception& e) { std::cerr << "SCRP test failure: " << e.what() << '\n'; return 1; }
 }
