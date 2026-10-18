@@ -109,6 +109,7 @@ bool Assets::loadRegistry() {
             d.file = n["file"].asString(d.file);
             readPair(n["frame"], d.frameW, d.frameH);
             d.columns = n["columns"].asInt(d.columns);
+            d.worldScale = n["world_scale"].asBool(d.worldScale);
             readPair(n["pivot"], d.pivotX, d.pivotY);
             d.fallback = parseColor(n["fallback"].asString(), d.fallback);
             if (d.columns < 1) d.columns = 1;

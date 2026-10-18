@@ -150,11 +150,15 @@ void Gfx::drawSprite(SpriteId id, const Vec2& worldPos, int col, int row,
 
     Vec2 origin = renderOrigin();
     const int S = artScale_;
+    // A sprite drawn in world units grows with the art scale, like a tile;
+    // one drawn in screen pixels does not. The pivot follows the same rule,
+    // otherwise the anchor would drift as the sprite grows.
+    const int K = d.worldScale ? S : 1;
     SDL_Rect dst;
-    dst.x = static_cast<int>(std::floor(worldPos.x - origin.x)) * S - d.pivotX;
-    dst.y = static_cast<int>(std::floor(worldPos.y - origin.y)) * S - d.pivotY;
-    dst.w = d.frameW;
-    dst.h = d.frameH;
+    dst.x = static_cast<int>(std::floor(worldPos.x - origin.x)) * S - d.pivotX * K;
+    dst.y = static_cast<int>(std::floor(worldPos.y - origin.y)) * S - d.pivotY * K;
+    dst.w = d.frameW * K;
+    dst.h = d.frameH * K;
 
     SDL_Texture* tex = assets_.texture(id);
     if (!tex) {

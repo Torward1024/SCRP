@@ -48,6 +48,17 @@ struct SpriteDef {
     // one-row sheet simply shows its only row for every facing instead of
     // reading past the texture and drawing nothing.
     int rows = 0;
+
+    // Whether one source pixel is one WORLD unit rather than one screen
+    // pixel. Drawing scales the destination by artScale for such a sprite,
+    // the way tiles have always been scaled.
+    //
+    // The default is false because that is what existing art assumes: it
+    // was drawn at screen resolution, and doubling it now would resize
+    // every placeholder in both games. Art imported from a game whose
+    // tiles are the same size as its sprites sets this, and then a
+    // creature two tiles across really covers two tiles.
+    bool worldScale = false;
 };
 
 struct SpriteSet {
