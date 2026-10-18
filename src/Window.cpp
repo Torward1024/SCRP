@@ -21,9 +21,19 @@ bool Window::open(const char* title,const JsonValue& config,int scaleOverride,bo
     if(config["resizable"].asBool(true)) flags|=SDL_WINDOW_RESIZABLE;
     window_=SDL_CreateWindow(title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,deviceW*scale,deviceH*scale,flags);
     if(!window_) return false;
-    Uint32 rendererFlags=config["software"].asBool()?SDL_RENDERER_SOFTWARE:SDL_RENDERER_ACCELERATED;
+    const bool wantSoftware=config["software"].asBool();
+    Uint32 rendererFlags=wantSoftware?SDL_RENDERER_SOFTWARE:SDL_RENDERER_ACCELERATED;
     if(vsync) rendererFlags|=SDL_RENDERER_PRESENTVSYNC;
     renderer_=SDL_CreateRenderer(window_,-1,rendererFlags);
+    // Fall back to the software renderer, as PixelWindow already does.
+    // A machine with no usable GPU driver, a remote session or a headless
+    // run has no accelerated driver to match, and refusing to start there
+    // is worse than running slowly: the game is pixel art at a fixed
+    // logical size, so software rasterisation keeps up.
+    if(!renderer_&&!wantSoftware) {
+        SDL_Log("[window] no accelerated renderer (%s); falling back to software",SDL_GetError());
+        renderer_=SDL_CreateRenderer(window_,-1,SDL_RENDERER_SOFTWARE);
+    }
     if(!renderer_) {shutdown();return false;}
     return true;
 }
