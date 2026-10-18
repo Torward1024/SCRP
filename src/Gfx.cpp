@@ -10,6 +10,24 @@ namespace {
 inline Uint8 modulate(Uint8 base, Uint8 tint) {
     return static_cast<Uint8>((static_cast<int>(base) * static_cast<int>(tint)) / 255);
 }
+
+// A frame index the sheet actually has.
+//
+// Callers index rows by facing and columns by animation step, and both
+// counts belong to the artwork, not to the caller. A sheet drawn with a
+// row it does not have used to produce a source rectangle outside the
+// texture, which SDL quietly clips to nothing: the sprite vanished for
+// half of the compass instead of looking wrong. Wrapping keeps something
+// on screen and makes a flat one-row sheet work for every facing.
+inline int sheetRow(const SpriteDef& d, int row) {
+    if (d.rows <= 0) return row < 0 ? 0 : row;
+    return ((row % d.rows) + d.rows) % d.rows;
+}
+
+inline int sheetCol(const SpriteDef& d, int col) {
+    if (d.columns <= 0) return col < 0 ? 0 : col;
+    return ((col % d.columns) + d.columns) % d.columns;
+}
 } // namespace
 
 bool Gfx::init(SDL_Renderer* renderer, int worldW, int worldH, int artScale) {
@@ -157,8 +175,8 @@ void Gfx::drawSprite(SpriteId id, const Vec2& worldPos, int col, int row,
     }
 
     SDL_Rect src;
-    src.x = col * d.frameW;
-    src.y = row * d.frameH;
+    src.x = sheetCol(d, col) * d.frameW;
+    src.y = sheetRow(d, row) * d.frameH;
     src.w = d.frameW;
     src.h = d.frameH;
 
@@ -325,7 +343,8 @@ void Gfx::drawSpriteScreen(SpriteId id, int x, int y, int col, int row, SDL_Colo
         return;
     }
 
-    SDL_Rect src{ col * d.frameW, row * d.frameH, d.frameW, d.frameH };
+    SDL_Rect src{ sheetCol(d, col) * d.frameW, sheetRow(d, row) * d.frameH,
+                  d.frameW, d.frameH };
     SDL_SetTextureColorMod(tex, tint.r, tint.g, tint.b);
     SDL_SetTextureAlphaMod(tex, tint.a);
     SDL_RenderCopy(renderer_, tex, &src, &dst);

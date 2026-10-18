@@ -38,7 +38,16 @@ struct SpriteDef {
     int columns = 1;      // frames per sheet row, or tiles per tileset row
     int pivotX = 0;       // anchor point inside the frame
     int pivotY = 0;
+
     SDL_Color fallback{ 255, 0, 255, 255 };   // placeholder colour when the resource is missing
+
+    // How many rows the sheet really has. Filled in when the texture loads,
+    // so a definition does not have to repeat what the file already says;
+    // 0 means "not loaded yet". Drawing wraps the row into this count, which
+    // is what lets a facing-indexed sprite share code with a flat one: a
+    // one-row sheet simply shows its only row for every facing instead of
+    // reading past the texture and drawing nothing.
+    int rows = 0;
 };
 
 struct SpriteSet {

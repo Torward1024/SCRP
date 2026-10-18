@@ -1,4 +1,6 @@
 #include "scrp/Assets.h"
+
+#include <algorithm>
 #include "scrp/Json.h"
 #include "scrp/Color.h"
 #include "scrp/Vfs.h"
@@ -225,6 +227,12 @@ SDL_Texture* Assets::texture(SpriteId id) {
 
     attempted_[index] = 1;
     textures_[index] = load(sprites_[index]);
+    if (textures_[index]) {
+        int w = 0, h = 0;
+        SDL_QueryTexture(textures_[index], nullptr, nullptr, &w, &h);
+        const SpriteDef& d = sprites_[index];
+        sprites_[index].rows = d.frameH > 0 ? std::max(1, h / d.frameH) : 1;
+    }
     if (!textures_[index]) {
         ++missing_;
         std::printf("[assets] missing file '%s' for sprite '%s'; using a placeholder\n",
