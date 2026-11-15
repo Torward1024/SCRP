@@ -4,6 +4,7 @@
 #include "scrp/FlowField.h"
 #include "scrp/FrameStepper.h"
 #include "scrp/PathFinder.h"
+#include "scrp/WeightedPath.h"
 #include "scrp/Rng.h"
 #include "scrp/SaveStore.h"
 #include "scrp/Signals.h"
@@ -58,6 +59,26 @@ int main() {
     CHECK(grid.collides({28,28},1));CHECK(!grid.collides({12,28},1));CHECK(grid.collides({-1,4},0));
     Vec2 position{20,28};CHECK(grid.moveWithCollision(position,{8,0},1));CHECK(position.x==20);
     Vec2 free;CHECK(grid.findFreeSpotNear({28,28},1,2,free));CHECK(!grid.collides(free,1));
+    {
+        // The expensive direct edge, a free cycle and equal-cost detours share a graph.
+        auto edges=[](size_t at, auto emit) {
+            if (at==0) { emit(3,12); emit(2,2); emit(1,2); }
+            if (at==1 || at==2) { emit(0,0); emit(3,1); }
+            if (at==3) emit(4,0);
+        };
+        auto zero=[](size_t) { return 0u; };
+        std::vector<size_t> path;
+        CHECK(PathFinder::findWeighted(0,4,edges,zero,path));
+        CHECK((path==std::vector<size_t>{2,3,4}));
+        CHECK(!PathFinder::findWeighted(4,0,edges,zero,path) && path.empty());
+        CHECK(PathFinder::findWeighted(0,0,edges,zero,path) && path.empty());
+        auto large=[](size_t at,auto emit) {
+            if (at==0) { emit(1,UINT64_MAX); emit(2,UINT64_MAX-1); }
+            if (at==1 || at==2) emit(3,1);
+        };
+        CHECK(PathFinder::findWeighted(0,3,large,zero,path));
+        CHECK((path==std::vector<size_t>{2,3}));
+    }
     std::vector<Vec2> route;CHECK(PathFinder::find(grid,{12,28},{44,28},route,100));CHECK(!route.empty());
     Vec2 anchor{12,28};for(auto waypoint:route){CHECK(grid.lineOfSight(anchor,waypoint));anchor=waypoint;}
     CHECK(!PathFinder::find(grid,{12,28},{44,28},route,1));

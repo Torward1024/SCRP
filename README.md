@@ -93,3 +93,5 @@ My code and project documentation are distributed under the [MIT license](LICENS
 Dependencies retain their own licenses; SDL2 uses the
 [zlib license](https://www.libsdl.org/license.php). Original game resources
 retain their owners' licenses and are not covered by this license.
+
+The Core header `scrp/WeightedPath.h` supplies a deterministic weighted route through caller-defined neighbors. It supports zero-cost edges, directed movement and a caller-supplied lower bound. The returned steps include the destination.
