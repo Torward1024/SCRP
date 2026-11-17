@@ -3,6 +3,11 @@
 SCRP is a reusable C++17 runtime. `SCRP::Core` has no SDL or game dependencies;
 `SCRP::SDL2` implements presentation; `SCRP::Audio` supplies optional SDL_mixer audio.
 
+The optional `SCRP::Physics3D` and `SCRP::Render3D` targets expose a narrow C17
+interface over C++17 implementations. Physics has no SDL dependency. Render3D owns
+a separate OpenGL context and does not modify the existing SDL_Renderer path.
+See [3D contracts and limitations](3D.md). Automotive models remain game code.
+
 Core contains JSON/XML/VFS, layered configuration, manifests, indexed images,
 vectors and deterministic random streams, typed animation/events/stats, signals,
 solid-grid collision and visibility, flow fields/A*, save storage and fixed steps.

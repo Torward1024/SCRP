@@ -11,6 +11,8 @@ constexpr int GLYPH_H = 5;
 constexpr int ADVANCE = 4;   // glyph width plus one spacing pixel
 
 int textWidth(const char* text);
+// Read-only five-row mask, shared with alternate presentation backends.
+const unsigned char* glyphRows(char character);
 
 void draw(Gfx& gfx, int x, int y, const char* text, SDL_Color color);
 void drawInt(Gfx& gfx, int x, int y, int value, SDL_Color color);

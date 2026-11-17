@@ -1,0 +1,18 @@
+name: Optional 3D modules
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libgl1-mesa-dev xvfb cmake ninja-build
+      - name: Configure
+        run: cmake -S . -B build/3d -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCRP_WITH_PHYSICS3D=ON -DSCRP_WITH_RENDER3D=ON -DSCRP_TEST_RENDER3D=ON
+      - name: Build
+        run: cmake --build build/3d --parallel 2
+      - name: Test
+        run: xvfb-run -a ctest --test-dir build/3d --output-on-failure

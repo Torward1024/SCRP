@@ -20,6 +20,8 @@ Resource bindings and runtime settings are supplied through JSON.
 | `SCRP::Core` | JSON/XML/VFS, configuration, indexed images/BMP, vectors/RNG, animation, events/signals/stats, grid collision/visibility, flow fields/A*, saves, localization/UTF-8, fixed steps | C++17 |
 | `SCRP::SDL2` | Windows, pixel output, sprite registries/roles, drawing/camera, input, diagnostic/Unicode bitmap fonts, lighting, particles and decals | SDL2; optional SDL2_image |
 | `SCRP::Audio` | Sound registry, channels/priorities, spatial audio, ambient loops and music | SDL2; optional SDL2_mixer |
+| `SCRP::Physics3D` | Optional rigid bodies, forces, impulses, CCD and ray queries through a C17 API | Pinned Jolt 5.3.0; no SDL |
+| `SCRP::Render3D` | Optional triangle meshes, perspective camera, lighting, fog and HUD through a C17 API | SDL2 and OpenGL 3.3 |
 
 Core has no SDL or game dependencies. A game supplies its solid grid, action names
 and JSON settings. The engine does not know specific enemies, weapons, keys or
@@ -58,6 +60,11 @@ ctest --test-dir build/cmake --output-on-failure
 
 Add `-DSCRP_USE_SDL_IMAGE=ON` for PNG sprites. Use `-DSCRP_WITH_SDL2=OFF` for tools
 that need only Core. CI tests the engine and bootstrap on Windows and Linux.
+
+The [optional 3D modules and C17 interface](docs/3D.md) are enabled with
+`SCRP_WITH_PHYSICS3D` and `SCRP_WITH_RENDER3D`. Both default to OFF. Physics uses
+a pinned, hash-checked Jolt source archive; enabling it requires CMake 3.20+.
+The new modules have local Windows validation; their Linux CI is not yet recorded.
 
 ## Integration
 

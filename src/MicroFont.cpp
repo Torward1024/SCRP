@@ -83,6 +83,11 @@ const Glyph* glyphFor(char c) {
 
 namespace MicroFont {
 
+const unsigned char* glyphRows(char character) {
+    const Glyph* glyph = glyphFor(character);
+    return glyph ? glyph->rows : kBlank.rows;
+}
+
 int textWidth(const char* text) {
     if (!text || !*text) return 0;
     int len = static_cast<int>(std::strlen(text));
