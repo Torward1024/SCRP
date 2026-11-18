@@ -6,6 +6,8 @@ extern "C" {
 #endif
 typedef struct scrp_view3d scrp_view3d;
 typedef uint64_t scrp_mesh_id;
+typedef uint64_t scrp_texture_id;
+typedef struct scrp_uv_vertex { scrp_vertex vertex; float u,v; } scrp_uv_vertex;
 typedef struct scrp_view_desc { const char *title; int width, height, hidden, vsync; } scrp_view_desc;
 typedef struct scrp_view_input { int quit, focused, width, height; double elapsed_seconds; } scrp_view_input;
 typedef struct scrp_spotlight { scrp_vec3 position, direction; scrp_color color; float range, cone_cos; } scrp_spotlight;
@@ -26,6 +28,13 @@ int scrp_view3d_key_down(const scrp_view3d *view, const char *name);
 /* Copies triangle vertices into GPU storage; caller retains the source memory. */
 int scrp_view3d_mesh_create(scrp_view3d *view, const scrp_vertex *triangles, uint32_t count, scrp_mesh_id *out, scrp_error *error);
 int scrp_view3d_mesh_destroy(scrp_view3d *view, scrp_mesh_id mesh, scrp_error *error);
+/* UV coordinates start at the top left. Each textured triangle can have seams.
+   UV meshes are immutable and can share any texture owned by this view. */
+int scrp_view3d_uv_mesh_create(scrp_view3d *view, const scrp_uv_vertex *triangles,
+                               uint32_t count, scrp_mesh_id *out, scrp_error *error);
+/* Load a BMP file into a view-owned texture with clamped edges. */
+int scrp_view3d_texture_load_bmp(scrp_view3d *view, const char *path, scrp_texture_id *out, scrp_error *error);
+int scrp_view3d_texture_destroy(scrp_view3d *view, scrp_texture_id texture, scrp_error *error);
 /* Replace vertices of an owned mesh. Validate all input before touching GPU data. */
 int scrp_view3d_mesh_update(scrp_view3d *view, scrp_mesh_id mesh,
                             const scrp_vertex *triangles, uint32_t count, scrp_error *error);
@@ -35,6 +44,8 @@ int scrp_view3d_cylinder_mesh(scrp_view3d *view, uint32_t segments, scrp_mesh_id
 int scrp_view3d_begin(scrp_view3d *view, const scrp_camera *camera, scrp_error *error);
 int scrp_view3d_draw(scrp_view3d *view, scrp_mesh_id mesh, scrp_pose pose, scrp_vec3 scale,
                      scrp_color tint, float emissive, scrp_error *error);
+int scrp_view3d_draw_textured(scrp_view3d *view, scrp_mesh_id mesh, scrp_texture_id texture,
+                              scrp_pose pose, scrp_vec3 scale, scrp_color tint, float emissive, scrp_error *error);
 /* Overlay coordinates use a caller-selected logical canvas, top-left origin.
    Scene draws precede overlays; overlay calls disable depth testing. */
 int scrp_view3d_overlay(scrp_view3d *view, const scrp_vertex *triangles, uint32_t count,

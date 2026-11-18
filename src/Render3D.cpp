@@ -27,7 +27,7 @@ struct GL {
     X(PFNGLUSEPROGRAMPROC,UseProgram) X(PFNGLGENVERTEXARRAYSPROC,GenVertexArrays) \
     X(PFNGLBINDVERTEXARRAYPROC,BindVertexArray) X(PFNGLDELETEVERTEXARRAYSPROC,DeleteVertexArrays) \
     X(PFNGLGENBUFFERSPROC,GenBuffers) X(PFNGLBINDBUFFERPROC,BindBuffer) \
-    X(PFNGLBUFFERDATAPROC,BufferData) X(PFNGLDELETEBUFFERSPROC,DeleteBuffers) \
+    X(PFNGLBUFFERDATAPROC,BufferData) X(PFNGLDELETEBUFFERSPROC,DeleteBuffers) X(PFNGLGENERATEMIPMAPPROC,GenerateMipmap) \
     X(PFNGLENABLEVERTEXATTRIBARRAYPROC,EnableVertexAttribArray) X(PFNGLVERTEXATTRIBPOINTERPROC,VertexAttribPointer) \
     X(PFNGLGETUNIFORMLOCATIONPROC,GetUniformLocation) X(PFNGLUNIFORMMATRIX4FVPROC,UniformMatrix4fv) \
     X(PFNGLUNIFORM4FPROC,Uniform4f) X(PFNGLUNIFORM3FPROC,Uniform3f) X(PFNGLUNIFORM1FPROC,Uniform1f) X(PFNGLUNIFORM1IPROC,Uniform1i)
@@ -72,17 +72,22 @@ const char *vertex_source = R"GLSL(#version 330 core
 layout(location=0) in vec3 position;
 layout(location=1) in vec3 normal;
 layout(location=2) in vec4 color;
+layout(location=3) in vec2 uv;
 uniform mat4 model, vp;
 out vec3 world, n;
 out vec4 vertex_color;
+out vec2 texture_uv;
 void main() {
     vec4 p = model * vec4(position,1.0);
     world=p.xyz; n=transpose(inverse(mat3(model)))*normal;
-    vertex_color=color; gl_Position=vp*p;
+    vertex_color=color; texture_uv=uv; gl_Position=vp*p;
 })GLSL";
 const char *fragment_source = R"GLSL(#version 330 core
 in vec3 world, n;
 in vec4 vertex_color;
+in vec2 texture_uv;
+uniform sampler2D albedo;
+uniform int textured;
 uniform vec4 tint, fog_color;
 uniform vec3 eye;
 uniform float fog_start, fog_end, emissive;
@@ -92,6 +97,7 @@ out vec4 output_color;
 void main() {
     vec4 surface=vertex_color*tint;
     if(overlay!=0) { output_color=surface; return; }
+    if(textured!=0) surface*=texture(albedo,texture_uv);
     vec3 normal=normalize(n);
     float diffuse=max(dot(normal,normalize(vec3(-0.4,0.8,0.3))),0.0);
     vec3 lit=surface.rgb*(0.33+0.67*diffuse);
@@ -110,8 +116,8 @@ void main() {
     float fog=clamp((length(world-eye)-fog_start)/(fog_end-fog_start),0.0,1.0);
     output_color=vec4(mix(lit,fog_color.rgb,fog),surface.a);
 })GLSL";
-std::atomic<uint64_t> next_mesh{1};
-struct Mesh { GLuint vao=0, vbo=0; GLsizei count=0; };
+std::atomic<uint64_t> next_resource{1};
+struct Mesh { GLuint vao=0, vbo=0; GLsizei count=0; bool has_uv=false; };
 bool color_ok(scrp_color c) { return std::isfinite(c.r)&&std::isfinite(c.g)&&std::isfinite(c.b)&&std::isfinite(c.a); }
 }}
 
@@ -122,6 +128,7 @@ struct scrp_view3d {
     GLuint program=0;
     scrp::Mesh stream;
     std::unordered_map<scrp_mesh_id,scrp::Mesh> meshes;
+    std::unordered_map<scrp_texture_id,GLuint> textures;
     bool video=false, frame=false, overlay=false;
     int width=0,height=0;
     Uint64 previous=0;
@@ -130,6 +137,7 @@ struct scrp_view3d {
         if (context) {
             SDL_GL_MakeCurrent(window,context);
             for (auto item:meshes) release(item.second);
+            for (auto item:textures) glDeleteTextures(1,&item.second);
             release(stream);
             if (program) gl.DeleteProgram(program);
             SDL_GL_DeleteContext(context);
@@ -145,17 +153,31 @@ struct scrp_view3d {
     GLint uniform(const char *name) { return gl.GetUniformLocation(program,name); }
     void matrix(const char *name,const scrp::Matrix& value) { gl.UniformMatrix4fv(uniform(name),1,GL_FALSE,value.data()); }
     void color(const char *name,scrp_color c) { gl.Uniform4f(uniform(name),c.r,c.g,c.b,c.a); }
-    void upload(scrp::Mesh& mesh,const scrp_vertex *vertices,uint32_t count,GLenum usage) {
+    void upload(scrp::Mesh& mesh,const void *vertices,uint32_t count,GLenum usage) {
+        const GLsizei stride=mesh.has_uv ? sizeof(scrp_uv_vertex) : sizeof(scrp_vertex);
         if (!mesh.vao) gl.GenVertexArrays(1,&mesh.vao);
         if (!mesh.vbo) gl.GenBuffers(1,&mesh.vbo);
         gl.BindVertexArray(mesh.vao); gl.BindBuffer(GL_ARRAY_BUFFER,mesh.vbo);
-        gl.BufferData(GL_ARRAY_BUFFER,sizeof(scrp_vertex)*count,vertices,usage);
+        gl.BufferData(GL_ARRAY_BUFFER,static_cast<GLsizeiptr>(stride)*count,vertices,usage);
         gl.EnableVertexAttribArray(0); gl.EnableVertexAttribArray(1); gl.EnableVertexAttribArray(2);
-        gl.VertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(scrp_vertex),reinterpret_cast<void*>(offsetof(scrp_vertex,position)));
-        gl.VertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,sizeof(scrp_vertex),reinterpret_cast<void*>(offsetof(scrp_vertex,normal)));
-        gl.VertexAttribPointer(2,4,GL_FLOAT,GL_FALSE,sizeof(scrp_vertex),reinterpret_cast<void*>(offsetof(scrp_vertex,color)));
+        gl.VertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,stride,reinterpret_cast<void*>(offsetof(scrp_vertex,position)));
+        gl.VertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,stride,reinterpret_cast<void*>(offsetof(scrp_vertex,normal)));
+        gl.VertexAttribPointer(2,4,GL_FLOAT,GL_FALSE,stride,reinterpret_cast<void*>(offsetof(scrp_vertex,color)));
+        if (mesh.has_uv) {
+            gl.EnableVertexAttribArray(3);
+            gl.VertexAttribPointer(3,2,GL_FLOAT,GL_FALSE,stride,reinterpret_cast<void*>(offsetof(scrp_uv_vertex,u)));
+        }
         mesh.count=static_cast<GLsizei>(count);
         if (glGetError()!=GL_NO_ERROR) throw std::runtime_error("OpenGL mesh upload failed");
+    }
+    scrp_mesh_id create_mesh(const void *vertices,uint32_t count,bool has_uv) {
+        current();
+        const auto id=scrp::next_resource.fetch_add(1);
+        auto& mesh=meshes[id];
+        mesh.has_uv=has_uv;
+        try { upload(mesh,vertices,count,GL_STATIC_DRAW); }
+        catch (...) { release(mesh); meshes.erase(id); throw; }
+        return id;
     }
     GLuint shader(GLenum type,const char *source) {
         const GLuint id=gl.CreateShader(type);
@@ -226,12 +248,63 @@ int scrp_view3d_mesh_create(scrp_view3d *view,const scrp_vertex *vertices,uint32
         if (!view || !vertices || !out || !count || count%3 || count>3000000) return scrp::capi::fail(error,"Mesh requires triangle vertices and an output");
         for (uint32_t i=0;i<count;++i)
             if (!scrp::capi::finite(vertices[i].position) || !scrp::capi::finite(vertices[i].normal) || !scrp::color_ok(vertices[i].color)) return scrp::capi::fail(error,"Mesh vertices must be finite");
+        *out=view->create_mesh(vertices,count,false);
+        return 1;
+    });
+}
+int scrp_view3d_uv_mesh_create(scrp_view3d *view,const scrp_uv_vertex *vertices,uint32_t count,scrp_mesh_id *out,scrp_error *error) {
+    return scrp::capi::boundary(error,[&]() {
+        if (out) *out=0;
+        if (!view || !vertices || !out || !count || count%3 || count>3000000)
+            return scrp::capi::fail(error,"UV mesh requires triangle vertices and an output");
+        for (uint32_t i=0;i<count;++i) {
+            const auto& v=vertices[i].vertex;
+            if (!scrp::capi::finite(v.position) || !scrp::capi::finite(v.normal) || !scrp::color_ok(v.color) ||
+                !std::isfinite(vertices[i].u) || !std::isfinite(vertices[i].v))
+                return scrp::capi::fail(error,"UV mesh vertices and coordinates must be finite");
+        }
+        *out=view->create_mesh(vertices,count,true);
+        return 1;
+    });
+}
+int scrp_view3d_texture_load_bmp(scrp_view3d *view,const char *path,scrp_texture_id *out,scrp_error *error) {
+    return scrp::capi::boundary(error,[&]() {
+        if (out) *out=0;
+        if (!view || !path || !*path || !out) return scrp::capi::fail(error,"Texture requires a BMP path and an output");
+        using Surface=std::unique_ptr<SDL_Surface,decltype(&SDL_FreeSurface)>;
+        Surface bitmap(SDL_LoadBMP(path),SDL_FreeSurface);
+        if (!bitmap) return scrp::capi::fail(error,SDL_GetError());
+        if (bitmap->w>8192 || bitmap->h>8192) return scrp::capi::fail(error,"Texture dimensions exceed 8192 pixels");
+        Surface rgba(SDL_ConvertSurfaceFormat(bitmap.get(),SDL_PIXELFORMAT_RGBA32,0),SDL_FreeSurface);
+        if (!rgba) return scrp::capi::fail(error,SDL_GetError());
         view->current();
-        const auto id=scrp::next_mesh.fetch_add(1);
-        auto& mesh=view->meshes[id];
-        try { view->upload(mesh,vertices,count,GL_STATIC_DRAW); }
-        catch (...) { view->release(mesh); view->meshes.erase(id); throw; }
-        *out=id; return 1;
+        const auto id=scrp::next_resource.fetch_add(1);
+        auto& name=view->textures[id];
+        glGenTextures(1,&name);
+        glBindTexture(GL_TEXTURE_2D,name);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH,rgba->pitch/4);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,rgba->w,rgba->h,0,GL_RGBA,GL_UNSIGNED_BYTE,rgba->pixels);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH,0);
+        view->gl.GenerateMipmap(GL_TEXTURE_2D);
+        if (glGetError()!=GL_NO_ERROR) {
+            glDeleteTextures(1,&name); view->textures.erase(id);
+            return scrp::capi::fail(error,"OpenGL texture upload failed");
+        }
+        *out=id;
+        return 1;
+    });
+}
+int scrp_view3d_texture_destroy(scrp_view3d *view,scrp_texture_id id,scrp_error *error) {
+    return scrp::capi::boundary(error,[&]() {
+        if (!view || !view->textures.count(id)) return scrp::capi::fail(error,"Unknown texture in this view");
+        view->current();
+        glDeleteTextures(1,&view->textures.at(id));
+        view->textures.erase(id);
+        return 1;
     });
 }
 int scrp_view3d_mesh_destroy(scrp_view3d *view,scrp_mesh_id mesh,scrp_error *error) {
@@ -242,7 +315,7 @@ int scrp_view3d_mesh_destroy(scrp_view3d *view,scrp_mesh_id mesh,scrp_error *err
 }
 int scrp_view3d_mesh_update(scrp_view3d *view,scrp_mesh_id id,const scrp_vertex *v,uint32_t count,scrp_error *error) {
     return scrp::capi::boundary(error,[&]() {
-        if (!view || !view->meshes.count(id) || !v || !count || count%3 || count>3000000)
+        if (!view || !view->meshes.count(id) || view->meshes.at(id).has_uv || !v || !count || count%3 || count>3000000)
             return scrp::capi::fail(error,"Mesh update requires an owned mesh and triangles");
         for (uint32_t i=0;i<count;++i) if (!scrp::capi::finite(v[i].position) || !scrp::capi::finite(v[i].normal) || !scrp::color_ok(v[i].color))
             return scrp::capi::fail(error,"Mesh vertices must be finite");
@@ -302,15 +375,26 @@ int scrp_view3d_begin(scrp_view3d *view,const scrp_camera *c,scrp_error *error) 
         view->frame=true; view->overlay=false; return 1;
     });
 }
-int scrp_view3d_draw(scrp_view3d *view,scrp_mesh_id id,scrp_pose pose,scrp_vec3 scale,scrp_color tint,float emissive,scrp_error *error) {
+static int draw_mesh(scrp_view3d *view,scrp_mesh_id id,scrp_texture_id texture,scrp_pose pose,scrp_vec3 scale,scrp_color tint,float emissive,scrp_error *error) {
     return scrp::capi::boundary(error,[&]() {
         if (!view || !view->frame || view->overlay || !view->meshes.count(id) || !scrp::capi::valid(pose) || !scrp::capi::finite(scale) ||
             scale.x<=0 || scale.y<=0 || scale.z<=0 || !scrp::color_ok(tint) || !std::isfinite(emissive)) return scrp::capi::fail(error,"Draw requires an active scene, owned mesh and valid transform");
+        if (texture && (!view->textures.count(texture) || !view->meshes.at(id).has_uv))
+            return scrp::capi::fail(error,"Textured draw requires an owned UV mesh and texture");
         view->current(); view->matrix("model",scrp::model(pose,scale)); view->color("tint",tint);
+        view->gl.Uniform1i(view->uniform("textured"),texture!=0);
+        if (texture) glBindTexture(GL_TEXTURE_2D,view->textures.at(texture));
         view->gl.Uniform1f(view->uniform("emissive"),std::clamp(emissive,0.0f,1.0f));
         const auto& mesh=view->meshes.at(id); view->gl.BindVertexArray(mesh.vao); glDrawArrays(GL_TRIANGLES,0,mesh.count);
         return 1;
     });
+}
+int scrp_view3d_draw(scrp_view3d *view,scrp_mesh_id id,scrp_pose pose,scrp_vec3 scale,scrp_color tint,float emissive,scrp_error *error) {
+    return draw_mesh(view,id,0,pose,scale,tint,emissive,error);
+}
+int scrp_view3d_draw_textured(scrp_view3d *view,scrp_mesh_id id,scrp_texture_id texture,scrp_pose pose,scrp_vec3 scale,scrp_color tint,float emissive,scrp_error *error) {
+    if (!texture) return scrp::capi::fail(error,"Textured draw requires a texture");
+    return draw_mesh(view,id,texture,pose,scale,tint,emissive,error);
 }
 int scrp_view3d_overlay(scrp_view3d *view,const scrp_vertex *v,uint32_t count,float w,float h,scrp_error *error) {
     return scrp::capi::boundary(error,[&]() {
