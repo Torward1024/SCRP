@@ -1,13 +1,13 @@
 #ifndef SCRP_C_RENDER3D_H
 #define SCRP_C_RENDER3D_H
 #include "Types.h"
+#include <stddef.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 typedef struct scrp_view3d scrp_view3d;
 typedef uint64_t scrp_mesh_id;
 typedef uint64_t scrp_texture_id;
-typedef struct scrp_uv_vertex { scrp_vertex vertex; float u,v; } scrp_uv_vertex;
 typedef struct scrp_view_desc { const char *title; int width, height, hidden, vsync; } scrp_view_desc;
 typedef struct scrp_view_input { int quit, focused, width, height; double elapsed_seconds; } scrp_view_input;
 typedef struct scrp_spotlight { scrp_vec3 position, direction; scrp_color color; float range, cone_cos; } scrp_spotlight;
@@ -34,6 +34,8 @@ int scrp_view3d_uv_mesh_create(scrp_view3d *view, const scrp_uv_vertex *triangle
                                uint32_t count, scrp_mesh_id *out, scrp_error *error);
 /* Load a BMP file into a view-owned texture with clamped edges. */
 int scrp_view3d_texture_load_bmp(scrp_view3d *view, const char *path, scrp_texture_id *out, scrp_error *error);
+/* Decode a top-left-origin PNG held in memory. Requires SCRP_RENDER3D_PNG. */
+int scrp_view3d_texture_load_png(scrp_view3d *view, const uint8_t *bytes, size_t size, scrp_texture_id *out, scrp_error *error);
 int scrp_view3d_texture_destroy(scrp_view3d *view, scrp_texture_id texture, scrp_error *error);
 /* Replace vertices of an owned mesh. Validate all input before touching GPU data. */
 int scrp_view3d_mesh_update(scrp_view3d *view, scrp_mesh_id mesh,

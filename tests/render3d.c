@@ -21,7 +21,7 @@ static int pixel_matches(SDL_Surface *surface,int x,int y,int r,int g,int b) {
     const Uint8 *pixel=(const Uint8*)surface->pixels+y*surface->pitch+4*x;
     return abs(pixel[0]-r)<50 && abs(pixel[1]-g)<50 && abs(pixel[2]-b)<50;
 }
-static void test_atlas(scrp_view3d *view,scrp_view3d *other,scrp_mesh_id plain) {
+static void test_atlas(scrp_view3d *view,scrp_view3d *other,scrp_mesh_id plain,int png) {
     scrp_error error={{0}};
     const char *atlas_path="scrp-render3d-test-atlas.bmp",*frame_path="scrp-render3d-test-frame.bmp";
     const scrp_color white={1,1,1,1};
@@ -35,8 +35,23 @@ static void test_atlas(scrp_view3d *view,scrp_view3d *other,scrp_mesh_id plain) 
         quad[i]=(scrp_uv_vertex){{corners[j],{0,0,1},white},j==1||j==2,j>=2};
     }
     scrp_mesh_id mesh=0; scrp_texture_id texture=0;
-    CHECK(write_test_atlas(atlas_path));
-    CHECK(scrp_view3d_texture_load_bmp(view,atlas_path,&texture,&error));
+    if (png) {
+        /* Lossless RGB image with the same four quadrants as the BMP fixture. */
+        static const uint8_t bytes[]={
+            0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,0x00,0x00,0x00,0x0d,
+            0x49,0x48,0x44,0x52,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x02,
+            0x08,0x02,0x00,0x00,0x00,0xfd,0xd4,0x9a,0x73,0x00,0x00,0x00,
+            0x12,0x49,0x44,0x41,0x54,0x78,0x9c,0x63,0xf8,0xcf,0xc0,0xc0,
+            0x00,0xc2,0x0c,0xff,0x81,0x00,0x00,0x1f,0xee,0x05,0xfb,0x0b,
+            0xd9,0x68,0x8b,0x00,0x00,0x00,0x00,0x49,0x45,0x4e,0x44,0xae,
+            0x42,0x60,0x82,
+        };
+        CHECK(!scrp_view3d_texture_load_png(view,bytes,12,&texture,&error) && !texture);
+        CHECK(scrp_view3d_texture_load_png(view,bytes,sizeof(bytes),&texture,&error));
+    } else {
+        CHECK(write_test_atlas(atlas_path));
+        CHECK(scrp_view3d_texture_load_bmp(view,atlas_path,&texture,&error));
+    }
     CHECK(!scrp_view3d_texture_destroy(other,texture,&error));
     CHECK(scrp_view3d_uv_mesh_create(view,quad,6,&mesh,&error));
     scrp_mesh_id invalid=99;
@@ -83,7 +98,10 @@ int main(void) {
     CHECK(!scrp_view3d_create(&desc,&view,&error));
     scrp_mesh_id cube=0; CHECK(scrp_view3d_box_mesh(view,&cube,&error));
     CHECK(!scrp_view3d_mesh_destroy(other,cube,&error));
-    test_atlas(view,other,cube);
+    test_atlas(view,other,cube,0);
+#ifdef SCRP_RENDER3D_PNG
+    test_atlas(view,other,cube,1);
+#endif
     scrp_vertex triangle[3]={{{0,0,0},{0,0,1},{1,1,1,1}},{{1,0,0},{0,0,1},{1,1,1,1}},{{0,1,0},{0,0,1},{1,1,1,1}}};
     scrp_mesh_id dynamic=0;
     CHECK(scrp_view3d_mesh_create(view,triangle,3,&dynamic,&error));

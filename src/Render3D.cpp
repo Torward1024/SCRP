@@ -2,6 +2,9 @@
 #include <scrp/MicroFont.h>
 #include "CApiInternal.h"
 #include <SDL.h>
+#ifdef SCRP_RENDER3D_PNG
+#include <png.h>
+#endif
 #include <SDL_opengl.h>
 #include <SDL_opengl_glext.h>
 #include <algorithm>
@@ -187,6 +190,28 @@ struct scrp_view3d {
         return id;
     }
 };
+static int upload_rgba(scrp_view3d *view,const void *pixels,int width,int height,int row_length,
+                       scrp_texture_id *out,scrp_error *error) {
+    view->current();
+    const auto id=scrp::next_resource.fetch_add(1);
+    auto& name=view->textures[id];
+    glGenTextures(1,&name);
+    glBindTexture(GL_TEXTURE_2D,name);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH,row_length);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,width,height,0,GL_RGBA,GL_UNSIGNED_BYTE,pixels);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH,0);
+    view->gl.GenerateMipmap(GL_TEXTURE_2D);
+    if (glGetError()!=GL_NO_ERROR) {
+        glDeleteTextures(1,&name); view->textures.erase(id);
+        return scrp::capi::fail(error,"OpenGL texture upload failed");
+    }
+    *out=id;
+    return 1;
+}
 extern "C" {
 int scrp_view3d_create(const scrp_view_desc *desc,scrp_view3d **out,scrp_error *error) {
     return scrp::capi::boundary(error,[&]() {
@@ -277,25 +302,26 @@ int scrp_view3d_texture_load_bmp(scrp_view3d *view,const char *path,scrp_texture
         if (bitmap->w>8192 || bitmap->h>8192) return scrp::capi::fail(error,"Texture dimensions exceed 8192 pixels");
         Surface rgba(SDL_ConvertSurfaceFormat(bitmap.get(),SDL_PIXELFORMAT_RGBA32,0),SDL_FreeSurface);
         if (!rgba) return scrp::capi::fail(error,SDL_GetError());
-        view->current();
-        const auto id=scrp::next_resource.fetch_add(1);
-        auto& name=view->textures[id];
-        glGenTextures(1,&name);
-        glBindTexture(GL_TEXTURE_2D,name);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH,rgba->pitch/4);
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,rgba->w,rgba->h,0,GL_RGBA,GL_UNSIGNED_BYTE,rgba->pixels);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH,0);
-        view->gl.GenerateMipmap(GL_TEXTURE_2D);
-        if (glGetError()!=GL_NO_ERROR) {
-            glDeleteTextures(1,&name); view->textures.erase(id);
-            return scrp::capi::fail(error,"OpenGL texture upload failed");
-        }
-        *out=id;
-        return 1;
+        return upload_rgba(view,rgba->pixels,rgba->w,rgba->h,rgba->pitch/4,out,error);
+    });
+}
+int scrp_view3d_texture_load_png(scrp_view3d *view,const uint8_t *bytes,size_t size,scrp_texture_id *out,scrp_error *error) {
+    return scrp::capi::boundary(error,[&]() {
+        if (out) *out=0;
+        if (!view || !bytes || !size || !out) return scrp::capi::fail(error,"Texture requires encoded PNG bytes and an output");
+#ifdef SCRP_RENDER3D_PNG
+        png_image image{};
+        image.version=PNG_IMAGE_VERSION;
+        auto cleanup=std::unique_ptr<png_image,decltype(&png_image_free)>(&image,png_image_free);
+        if (!png_image_begin_read_from_memory(&image,bytes,size)) return scrp::capi::fail(error,image.message);
+        if (image.width>8192 || image.height>8192) return scrp::capi::fail(error,"Texture dimensions exceed 8192 pixels");
+        image.format=PNG_FORMAT_RGBA;
+        std::vector<uint8_t> rgba(PNG_IMAGE_SIZE(image));
+        if (!png_image_finish_read(&image,nullptr,rgba.data(),0,nullptr)) return scrp::capi::fail(error,image.message);
+        return upload_rgba(view,rgba.data(),int(image.width),int(image.height),0,out,error);
+#else
+        return scrp::capi::fail(error,"PNG textures require SCRP_RENDER3D_PNG");
+#endif
     });
 }
 int scrp_view3d_texture_destroy(scrp_view3d *view,scrp_texture_id id,scrp_error *error) {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Read named GLB 2.0 mesh primitives and embedded images through a C17 Core API.
+  Indexed triangles expand into ordered CPU arrays for rendering or deformation.
+- Enable in-memory PNG textures with `SCRP_RENDER3D_PNG=ON` and libpng.
+
 - Load layered localization catalogues with regional and fallback language lookup,
   one-pass placeholders and exact integer plural predicates supplied by JSON.
 - Validate/edit UTF-8 and draw game-supplied Unicode bitmap glyph maps without
