@@ -13,6 +13,7 @@ typedef struct scrp_vec3 { float x, y, z; } scrp_vec3;
 typedef struct scrp_quat { float x, y, z, w; } scrp_quat;
 typedef struct scrp_pose { scrp_vec3 position; scrp_quat rotation; } scrp_pose;
 typedef struct scrp_color { float r, g, b, a; } scrp_color;
+typedef struct scrp_vertex { scrp_vec3 position, normal; scrp_color color; } scrp_vertex;
 
 scrp_vec3 scrp_vec3_add(scrp_vec3 a, scrp_vec3 b);
 scrp_vec3 scrp_vec3_sub(scrp_vec3 a, scrp_vec3 b);

@@ -62,3 +62,10 @@ Integer plural categories are JSON predicates, independent of built-in languages
 Utf8 supplies decoding/validation and complete-code-point deletion. SDL2 BitmapFont
 uses Unicode glyph maps, fallback glyphs, measured text and bounded atlas drawing.
 The consumer decodes font resources and maps character slots to Unicode.
+
+Core's C17 `Mesh.h` applies caller-defined bounded displacement fields, optional
+vertex protection weights, normal rebuilds and bounds. Render3D can replace owned
+GPU mesh data without exposing graphics types. Physics3D exposes oriented cylinder
+sweeps with normal filters and initial-overlap depth. Automotive suspension,
+pressure, elastic tire fields, part compatibility and scene placement remain in
+Road Saints; these engine facilities carry no vehicle rules.

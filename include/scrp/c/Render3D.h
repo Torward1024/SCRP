@@ -8,7 +8,6 @@ typedef struct scrp_view3d scrp_view3d;
 typedef uint64_t scrp_mesh_id;
 typedef struct scrp_view_desc { const char *title; int width, height, hidden, vsync; } scrp_view_desc;
 typedef struct scrp_view_input { int quit, focused, width, height; double elapsed_seconds; } scrp_view_input;
-typedef struct scrp_vertex { scrp_vec3 position, normal; scrp_color color; } scrp_vertex;
 typedef struct scrp_spotlight { scrp_vec3 position, direction; scrp_color color; float range, cone_cos; } scrp_spotlight;
 typedef struct scrp_camera {
     scrp_vec3 eye, target, up;
@@ -27,6 +26,9 @@ int scrp_view3d_key_down(const scrp_view3d *view, const char *name);
 /* Copies triangle vertices into GPU storage; caller retains the source memory. */
 int scrp_view3d_mesh_create(scrp_view3d *view, const scrp_vertex *triangles, uint32_t count, scrp_mesh_id *out, scrp_error *error);
 int scrp_view3d_mesh_destroy(scrp_view3d *view, scrp_mesh_id mesh, scrp_error *error);
+/* Replace vertices of an owned mesh. Validate all input before touching GPU data. */
+int scrp_view3d_mesh_update(scrp_view3d *view, scrp_mesh_id mesh,
+                            const scrp_vertex *triangles, uint32_t count, scrp_error *error);
 /* Centered unit box; cylinder is length 1 along X, radius 1 in YZ. Flat normals. */
 int scrp_view3d_box_mesh(scrp_view3d *view, scrp_mesh_id *out, scrp_error *error);
 int scrp_view3d_cylinder_mesh(scrp_view3d *view, uint32_t segments, scrp_mesh_id *out, scrp_error *error);

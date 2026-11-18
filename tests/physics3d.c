@@ -55,6 +55,32 @@ int main(void) {
     CHECK(scrp_world_raycast(world,(scrp_vec3){0,4,0},(scrp_vec3){0,10,0},0,&hit,&error));
     CHECK(!hit.hit && hit.body==0);
     CHECK(!scrp_world_raycast(world,(scrp_vec3){NAN,0,0},(scrp_vec3){0,-1,0},0,&hit,&error));
+    /* A finite-width sweep supports an edge which a center ray misses. */
+    scrp_cylinder_cast cast={0}; scrp_shape_hit shape_hit;
+    cast.pose=(scrp_pose){{0,1,0},scrp_quat_axis_angle((scrp_vec3){0,0,1},-1.570796327f)};
+    cast.radius=.35f; cast.half_height=.12f; cast.displacement=(scrp_vec3){0,-2,0};
+    cast.surface_axis=(scrp_vec3){0,1,0}; cast.min_surface_dot=.3f; cast.ignore=body;
+    CHECK(scrp_world_cast_cylinder(world,&cast,&shape_hit,&error));
+    printf("Cylinder floor hit: fraction %.6f, point %.6f %.6f %.6f, normal %.6f %.6f %.6f, depth %.6f\n",shape_hit.surface.fraction,
+        shape_hit.surface.point.x,shape_hit.surface.point.y,shape_hit.surface.point.z,shape_hit.surface.normal.x,shape_hit.surface.normal.y,shape_hit.surface.normal.z,shape_hit.penetration_depth);
+    CHECK(shape_hit.surface.hit && shape_hit.surface.body==ground && fabsf(shape_hit.surface.fraction-.325f)<.002f);
+    CHECK(shape_hit.surface.normal.y>.99f && fabsf(shape_hit.surface.point.y)<.002f && shape_hit.penetration_depth==0);
+    cast.pose.position.y=.25f;
+    CHECK(scrp_world_cast_cylinder(world,&cast,&shape_hit,&error));
+    CHECK(shape_hit.surface.hit && shape_hit.surface.fraction==0 && fabsf(shape_hit.penetration_depth-.10f)<.003f);
+    scrp_body_id edge;
+    d=box(20,.75f,0); d.half_extent=(scrp_vec3){.1f,.05f,1};
+    CHECK(scrp_world_add_box(world,&d,&edge,&error));
+    cast.pose.position=(scrp_vec3){20.2f,1.5f,0};
+    CHECK(scrp_world_raycast(world,cast.pose.position,cast.displacement,body,&hit,&error) && hit.body==ground);
+    CHECK(scrp_world_cast_cylinder(world,&cast,&shape_hit,&error));
+    CHECK(shape_hit.surface.hit && shape_hit.surface.body==edge && shape_hit.surface.normal.y>.9f);
+    cast.surface_axis=(scrp_vec3){0,-1,0};
+    CHECK(scrp_world_cast_cylinder(world,&cast,&shape_hit,&error) && !shape_hit.surface.hit);
+    cast.surface_axis=(scrp_vec3){0,2,0};
+    CHECK(!scrp_world_cast_cylinder(world,&cast,&shape_hit,&error));
+    cast.surface_axis=(scrp_vec3){0,1,0}; cast.radius=NAN;
+    CHECK(!scrp_world_cast_cylinder(world,&cast,&shape_hit,&error));
 
     /* Force at an offset generates both translation and rotation; reset removes both. */
     CHECK(scrp_world_set_pose(world,body,(scrp_pose){{0,8,0},{0,0,0,1}},&error));
@@ -100,6 +126,6 @@ int main(void) {
     CHECK(fabsf(rotated.x-1)<.00001f && fabsf(rotated.z)<.00001f);
     const scrp_pose halfway=scrp_pose_lerp((scrp_pose){{0,0,0},yaw},(scrp_pose){{2,0,0},{-yaw.x,-yaw.y,-yaw.z,-yaw.w}},.5f);
     CHECK(fabsf(halfway.position.x-1)<.00001f && fabsf(halfway.rotation.y-yaw.y)<.00001f);
-    printf("Physics C17: %s; failures=%d\n",scrp_physics_backend(),failures);
+    printf("Physics C17 including cylinder sweeps, overlap and edge support: %s; failures=%d\n",scrp_physics_backend(),failures);
     return failures ? 1 : 0;
 }

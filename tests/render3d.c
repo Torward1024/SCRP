@@ -14,6 +14,16 @@ int main(void) {
     CHECK(!scrp_view3d_create(&desc,&view,&error));
     scrp_mesh_id cube=0; CHECK(scrp_view3d_box_mesh(view,&cube,&error));
     CHECK(!scrp_view3d_mesh_destroy(other,cube,&error));
+    scrp_vertex triangle[3]={{{0,0,0},{0,0,1},{1,1,1,1}},{{1,0,0},{0,0,1},{1,1,1,1}},{{0,1,0},{0,0,1},{1,1,1,1}}};
+    scrp_mesh_id dynamic=0;
+    CHECK(scrp_view3d_mesh_create(view,triangle,3,&dynamic,&error));
+    triangle[2].position.y=2;
+    CHECK(!scrp_view3d_mesh_update(other,dynamic,triangle,3,&error));
+    CHECK(scrp_view3d_mesh_update(view,dynamic,triangle,3,&error));
+    triangle[2].position.y=NAN;
+    CHECK(!scrp_view3d_mesh_update(view,dynamic,triangle,3,&error));
+    triangle[2].position.y=2;
+    CHECK(!scrp_view3d_mesh_update(view,dynamic,triangle,2,&error));
     const scrp_pose pose={{0,0,0},{0,0,0,1}};
     const scrp_vec3 scale={1,1,1}; const scrp_color color={.5f,.6f,.7f,1};
     CHECK(!scrp_view3d_draw(view,cube,pose,scale,color,0,&error));
@@ -23,6 +33,7 @@ int main(void) {
     CHECK(scrp_view3d_begin(view,&camera,&error));
     CHECK(!scrp_view3d_begin(view,&camera,&error));
     CHECK(scrp_view3d_draw(view,cube,pose,scale,color,0,&error));
+    CHECK(scrp_view3d_draw(view,dynamic,pose,scale,color,0,&error));
     CHECK(!scrp_view3d_draw(view,cube,pose,(scrp_vec3){0,1,1},color,0,&error));
     CHECK(scrp_view3d_text(view,10,10,"C17 OPENGL CONTRACT",2,color,320,180,&error));
     CHECK(!scrp_view3d_draw(view,cube,pose,scale,color,0,&error));

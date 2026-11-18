@@ -26,6 +26,20 @@ typedef struct scrp_ray_hit {
     float fraction;
     scrp_vec3 point, normal, velocity;
 } scrp_ray_hit;
+typedef struct scrp_cylinder_cast {
+    scrp_pose pose; /* Cylinder axis is local Y. Edges have a small internal
+                      convex margin (at most 1 cm); outer dimensions are kept. */
+    float half_height, radius;
+    scrp_vec3 displacement;
+    /* Only accept surface normals facing this unit axis; -1 accepts all. */
+    scrp_vec3 surface_axis;
+    float min_surface_dot;
+    scrp_body_id ignore;
+} scrp_cylinder_cast;
+typedef struct scrp_shape_hit {
+    scrp_ray_hit surface;
+    float penetration_depth; /* Nonzero for an initial overlap; fraction is zero. */
+} scrp_shape_hit;
 
 /* Initialize *out to NULL; failed creation leaves it unchanged. Destroy clears it.
    The world owns all its bodies. All operations on a world use one thread.
@@ -46,6 +60,8 @@ int scrp_world_step(scrp_world *world, float dt, scrp_error *error);
 int scrp_world_raycast(const scrp_world *world, scrp_vec3 origin, scrp_vec3 displacement,
                        scrp_body_id ignore, scrp_ray_hit *out, scrp_error *error);
 const char *scrp_physics_backend(void);
+int scrp_world_cast_cylinder(const scrp_world *world, const scrp_cylinder_cast *cast,
+                              scrp_shape_hit *out, scrp_error *error);
 #ifdef __cplusplus
 }
 #endif

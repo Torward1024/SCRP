@@ -20,8 +20,8 @@ Resource bindings and runtime settings are supplied through JSON.
 | `SCRP::Core` | JSON/XML/VFS, configuration, indexed images/BMP, vectors/RNG, animation, events/signals/stats, grid collision/visibility, flow fields/A*, saves, localization/UTF-8, fixed steps | C++17 |
 | `SCRP::SDL2` | Windows, pixel output, sprite registries/roles, drawing/camera, input, diagnostic/Unicode bitmap fonts, lighting, particles and decals | SDL2; optional SDL2_image |
 | `SCRP::Audio` | Sound registry, channels/priorities, spatial audio, ambient loops and music | SDL2; optional SDL2_mixer |
-| `SCRP::Physics3D` | Optional rigid bodies, forces, impulses, CCD and ray queries through a C17 API | Pinned Jolt 5.3.0; no SDL |
-| `SCRP::Render3D` | Optional triangle meshes, perspective camera, lighting, fog and HUD through a C17 API | SDL2 and OpenGL 3.3 |
+| `SCRP::Physics3D` | Optional rigid bodies, forces, impulses, CCD, rays and cylinder sweeps through a C17 API | Pinned Jolt 5.3.0; no SDL |
+| `SCRP::Render3D` | Optional dynamic triangle meshes, perspective camera, lighting, fog and HUD through a C17 API | SDL2 and OpenGL 3.3 |
 
 Core has no SDL or game dependencies. A game supplies its solid grid, action names
 and JSON settings. The engine does not know specific enemies, weapons, keys or

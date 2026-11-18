@@ -240,6 +240,15 @@ int scrp_view3d_mesh_destroy(scrp_view3d *view,scrp_mesh_id mesh,scrp_error *err
         view->current(); view->release(view->meshes.at(mesh)); view->meshes.erase(mesh); return 1;
     });
 }
+int scrp_view3d_mesh_update(scrp_view3d *view,scrp_mesh_id id,const scrp_vertex *v,uint32_t count,scrp_error *error) {
+    return scrp::capi::boundary(error,[&]() {
+        if (!view || !view->meshes.count(id) || !v || !count || count%3 || count>3000000)
+            return scrp::capi::fail(error,"Mesh update requires an owned mesh and triangles");
+        for (uint32_t i=0;i<count;++i) if (!scrp::capi::finite(v[i].position) || !scrp::capi::finite(v[i].normal) || !scrp::color_ok(v[i].color))
+            return scrp::capi::fail(error,"Mesh vertices must be finite");
+        view->current(); view->upload(view->meshes.at(id),v,count,GL_DYNAMIC_DRAW); return 1;
+    });
+}
 int scrp_view3d_box_mesh(scrp_view3d *view,scrp_mesh_id *out,scrp_error *error) {
     const scrp_vec3 p[8]={{-.5f,-.5f,-.5f},{.5f,-.5f,-.5f},{.5f,.5f,-.5f},{-.5f,.5f,-.5f},
                           {-.5f,-.5f,.5f},{.5f,-.5f,.5f},{.5f,.5f,.5f},{-.5f,.5f,.5f}};

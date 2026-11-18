@@ -7,6 +7,9 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/Shape/CylinderShape.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <scrp/c/Physics3D.h>
@@ -219,4 +222,52 @@ int scrp_world_raycast(const scrp_world *world, scrp_vec3 origin, scrp_vec3 disp
     });
 }
 const char *scrp_physics_backend(void) { return "Jolt 5.3.0 (0373ec0dd762e4bc2f6acdb08371ee84fa23c6db)"; }
+int scrp_world_cast_cylinder(const scrp_world *world,const scrp_cylinder_cast *cast,scrp_shape_hit *out,scrp_error *error) {
+    return scrp::capi::boundary(error,[&]() {
+        if (out) *out={};
+        if (!world || !cast || !out || !scrp::capi::valid(cast->pose) ||
+            !scrp::range(cast->half_height,.001f,1000) || !scrp::range(cast->radius,.001f,1000) ||
+            !scrp::capi::bounded(cast->displacement,1e6f) || scrp_vec3_dot(cast->displacement,cast->displacement)<1e-12f ||
+            !scrp::capi::finite(cast->surface_axis) || std::abs(scrp_vec3_dot(cast->surface_axis,cast->surface_axis)-1)>0.002f ||
+            !scrp::range(cast->min_surface_dot,-1,1)) return scrp::capi::fail(error,"Invalid cylinder cast geometry or normal filter");
+        auto& w=*world->impl;
+        const auto skip=w.find(cast->ignore);
+        if (cast->ignore && skip.IsInvalid()) return scrp::capi::fail(error,"Unknown ignored body in this world");
+        /* A small internal convex margin keeps GJK normals well conditioned at
+           exact touching contact while preserving the outer dimensions. */
+        const float margin=std::min(.01f,std::min(cast->half_height,cast->radius)*.1f);
+        JPH::CylinderShape shape(cast->half_height,cast->radius,margin);
+        shape.SetEmbedded();
+        const auto origin=scrp::point(cast->pose.position);
+        JPH::RShapeCast sweep(&shape,JPH::Vec3::sReplicate(1),JPH::RMat44::sRotationTranslation(scrp::quat(cast->pose.rotation),origin),scrp::vec(cast->displacement));
+        JPH::ShapeCastSettings settings;
+        settings.mUseShrunkenShapeAndConvexRadius=true;
+        settings.mReturnDeepestPoint=true;
+        class Collector final : public JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> {
+        public:
+            JPH::Vec3 axis; float threshold;
+            Collector(JPH::Vec3 a,float t):axis(a),threshold(t) {}
+            void AddHit(const JPH::ShapeCastResult& hit) override {
+                if (hit.mPenetrationAxis.LengthSq()>1e-12f && (-hit.mPenetrationAxis.Normalized()).Dot(axis)>=threshold)
+                    JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector>::AddHit(hit);
+            }
+        } collector(scrp::vec(cast->surface_axis),cast->min_surface_dot);
+        w.system.GetNarrowPhaseQuery().CastShape(sweep,settings,origin,collector,{}, {},JPH::IgnoreSingleBodyFilter(skip));
+        if (!collector.HadHit()) return 1;
+        const auto& hit=collector.mHit;
+        JPH::BodyLockRead lock(w.system.GetBodyLockInterface(),hit.mBodyID2);
+        if (!lock.Succeeded()) return scrp::capi::fail(error,"Unable to read cast hit body");
+        const auto p=origin+hit.mContactPointOn2;
+        const auto& b=lock.GetBody();
+        auto normal=-hit.mPenetrationAxis.Normalized();
+        const auto surface_normal=b.GetWorldSpaceSurfaceNormal(hit.mSubShapeID2,p);
+        /* GJK's near-zero separation can introduce a small lateral bias on a
+           large flat face. Use its exact surface normal only when both agree;
+           retain the separation normal for actual edge/corner contact. */
+        if (normal.Dot(surface_normal)>.9999f && surface_normal.Dot(scrp::vec(cast->surface_axis))>=cast->min_surface_dot) normal=surface_normal;
+        out->surface={1,b.GetUserData(),hit.mFraction,scrp::from(JPH::Vec3(p)),scrp::from(normal),scrp::from(b.GetPointVelocity(p))};
+        out->penetration_depth=hit.mFraction==0 ? hit.mPenetrationDepth : 0;
+        return 1;
+    });
+}
 }
