@@ -20,6 +20,13 @@ typedef struct scrp_body_state {
     scrp_vec3 linear_velocity, angular_velocity;
     int active;
 } scrp_body_state;
+typedef struct scrp_impact {
+    scrp_body_id body_a, body_b;
+    scrp_vec3 point, normal; /* World contact centroid; normal points A -> B. */
+    scrp_vec3 local_point_a, local_point_b; /* Surface positions in each body's frame at contact. */
+    scrp_vec3 local_normal_a, local_normal_b; /* Outward, opposite after transforming to world space. */
+    float closing_speed, estimated_normal_impulse; /* m/s and N s, respectively. */
+} scrp_impact;
 typedef struct scrp_ray_hit {
     int hit;
     scrp_body_id body;
@@ -55,6 +62,14 @@ int scrp_world_apply_force(scrp_world *world, scrp_body_id body, scrp_vec3 force
 int scrp_world_apply_impulse(scrp_world *world, scrp_body_id body, scrp_vec3 impulse, scrp_vec3 point, scrp_error *error);
 /* One explicit fixed step, 0 < dt <= 1/30 second. Forces are consumed by this step. */
 int scrp_world_step(scrp_world *world, float dt, scrp_error *error);
+/* Snapshot of newly closing contact episodes at or above 0.5 m/s normal
+   speed. One event per body pair, in ascending body-ID order. The normal
+   impulse is an isolated-pair estimate using point velocities and effective
+   mass before resolution. Other simultaneous contacts can alter the result.
+   The next step replaces the snapshot. Removing or teleporting a body erases
+   its entries and may change indices. A successful read copies the event. */
+uint32_t scrp_world_impact_count(const scrp_world *world);
+int scrp_world_impact_read(const scrp_world *world, uint32_t index, scrp_impact *out, scrp_error *error);
 /* Closest surface hit along a displacement (not a unit direction). Ignore 0 or one
    valid body. No hit is success with hit=0. Hits include surface point velocity. */
 int scrp_world_raycast(const scrp_world *world, scrp_vec3 origin, scrp_vec3 displacement,

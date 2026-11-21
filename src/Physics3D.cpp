@@ -12,11 +12,16 @@
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/ContactListener.h>
 #include <scrp/c/Physics3D.h>
 #include "CApiInternal.h"
 #include <atomic>
+#include <algorithm>
 #include <memory>
+#include <mutex>
+#include <tuple>
 #include <unordered_map>
+#include <vector>
 
 namespace scrp {
 namespace {
@@ -51,6 +56,150 @@ JPH::RVec3 point(scrp_vec3 v) { return {v.x,v.y,v.z}; }
 scrp_vec3 from(JPH::Vec3 v) { return {v.GetX(),v.GetY(),v.GetZ()}; }
 JPH::Quat quat(scrp_quat q) { return JPH::Quat(q.x,q.y,q.z,q.w).Normalized(); }
 bool range(float value, float low, float high) { return std::isfinite(value) && value >= low && value <= high; }
+
+struct ImpactCandidate {
+    scrp_impact event;
+    struct Sweep {
+        JPH::BodyID body;
+        JPH::RVec3 center_at_hit;
+        JPH::Vec3 direction;
+    } sweeps[2];
+};
+using BodyPair = std::pair<scrp_body_id,scrp_body_id>;
+BodyPair pair_of(const scrp_impact& e) { return {e.body_a,e.body_b}; }
+
+// The world currently owns centered boxes. Their support planes let us locate
+// the hit in both local frames before Jolt advances a linear-cast body to TOI.
+float support_radius(const JPH::Body& b,JPH::Vec3 local_normal) {
+    return b.GetShape()->GetLocalBounds().GetExtent().Dot(local_normal.Abs());
+}
+JPH::Vec3 cast_velocity(const JPH::Body& b) {
+    return b.IsDynamic() && b.GetMotionProperties()->GetMotionQuality()==JPH::EMotionQuality::LinearCast
+        ? b.GetLinearVelocity() : JPH::Vec3::sZero();
+}
+float inverse_effective_mass(const JPH::Body& b,JPH::Vec3 arm,JPH::Vec3 normal) {
+    if (!b.IsDynamic()) return 0;
+    const auto torque=arm.Cross(normal);
+    return b.GetMotionProperties()->GetInverseMass() + torque.Dot(b.GetInverseInertia().Multiply3x3(torque));
+}
+
+class ImpactListener final : public JPH::ContactListener {
+public:
+    std::vector<scrp_impact> snapshot;
+    float dt=0, restitution_threshold=1, cast_threshold=.75f;
+
+    void begin(float step_dt) {
+        dt=step_dt;
+        pending.clear();
+        snapshot.clear();
+        failed=false;
+    }
+    void OnContactAdded(const JPH::Body& a,const JPH::Body& b,const JPH::ContactManifold& manifold,
+                        JPH::ContactSettings& settings) override { record(a,b,manifold,settings); }
+    void OnContactPersisted(const JPH::Body& a,const JPH::Body& b,const JPH::ContactManifold& manifold,
+                            JPH::ContactSettings& settings) override { record(a,b,manifold,settings); }
+
+    bool finish(const JPH::BodyInterface& api) {
+        if (failed) { previous.clear(); return false; }
+        // CCD can notify both potential collisions before it orders them by
+        // time and cuts one cast short. Discard a pair whose surfaces never met.
+        pending.erase(std::remove_if(pending.begin(),pending.end(),[&](const ImpactCandidate& p) {
+            for (const auto& sweep:p.sweeps)
+                if (!sweep.body.IsInvalid() &&
+                    JPH::Vec3(api.GetCenterOfMassPosition(sweep.body)-sweep.center_at_hit).Dot(sweep.direction)<-.01f) return true;
+            return false;
+        }),pending.end());
+        std::sort(pending.begin(),pending.end(),[](const ImpactCandidate& x,const ImpactCandidate& y) {
+            const auto& a=x.event; const auto& b=y.event;
+            if (pair_of(a)!=pair_of(b)) return pair_of(a)<pair_of(b);
+            if (a.estimated_normal_impulse!=b.estimated_normal_impulse) return a.estimated_normal_impulse>b.estimated_normal_impulse;
+            return std::tie(a.point.x,a.point.y,a.point.z,a.normal.x,a.normal.y,a.normal.z,a.closing_speed)<
+                   std::tie(b.point.x,b.point.y,b.point.z,b.normal.x,b.normal.y,b.normal.z,b.closing_speed);
+        });
+        current.clear();
+        // An allocation failure before publication leaves an empty snapshot.
+        current.reserve(pending.size());
+        snapshot.reserve(pending.size());
+        for (const auto& p:pending) {
+            const auto pair=pair_of(p.event);
+            if (!current.empty() && current.back()==pair) continue;
+            current.push_back(pair);
+            if (!std::binary_search(previous.begin(),previous.end(),pair)) snapshot.push_back(p.event);
+        }
+        current.swap(previous);
+        return true;
+    }
+
+    void abandon() { previous.clear(); snapshot.clear(); }
+
+    void forget(scrp_body_id id) {
+        snapshot.erase(std::remove_if(snapshot.begin(),snapshot.end(),[id](const scrp_impact& e) {
+            return e.body_a==id || e.body_b==id;
+        }),snapshot.end());
+        previous.erase(std::remove_if(previous.begin(),previous.end(),[id](const BodyPair& p) {
+            return p.first==id || p.second==id;
+        }),previous.end());
+    }
+
+private:
+    std::vector<ImpactCandidate> pending;
+    std::vector<BodyPair> previous,current;
+    std::mutex mutex;
+    bool failed=false;
+
+    ImpactCandidate::Sweep sweep_end(const JPH::Body& body,JPH::Vec3 velocity,JPH::RVec3 center_at_hit,float time) const {
+        if (!time || velocity.LengthSq()*dt*dt <= JPH::Square(cast_threshold*body.GetShape()->GetInnerRadius()))
+            return {JPH::BodyID(),JPH::RVec3::sZero(),JPH::Vec3::sZero()};
+        return {body.GetID(),center_at_hit,velocity.Normalized()};
+    }
+
+    void record(const JPH::Body& a,const JPH::Body& b,const JPH::ContactManifold& m,const JPH::ContactSettings& settings) {
+        const auto n=m.mWorldSpaceNormal;
+        const auto qa=a.GetRotation().Conjugated(),qb=b.GetRotation().Conjugated();
+        const auto na=qa*n,nb=qb*(-n);
+        const auto com_a=a.GetCenterOfMassPosition(),com_b=b.GetCenterOfMassPosition();
+        const auto va=cast_velocity(a),vb=cast_velocity(b);
+        const float gap=JPH::Vec3(com_b-com_a).Dot(n)-support_radius(a,na)-support_radius(b,nb);
+        const float approach=(va-vb).Dot(n);
+        const bool swept=m.mPenetrationDepth>=-.00001f && gap>.0001f && approach>0;
+        const float time=swept ? std::min(dt,gap/approach) : 0;
+        const auto center_a=com_a+va*time,center_b=com_b+vb*time;
+        JPH::Vec3 sum_a=JPH::Vec3::sZero(),sum_b=JPH::Vec3::sZero();
+        float weight=0;
+        for (JPH::uint i=0;i<m.mRelativeContactPointsOn1.size();++i) {
+            const auto arm_a=JPH::Vec3(m.GetWorldSpaceContactPointOn1(i)-center_a);
+            const auto arm_b=JPH::Vec3(m.GetWorldSpaceContactPointOn2(i)-center_b);
+            const float speed=(a.GetPointVelocityCOM(arm_a)-b.GetPointVelocityCOM(arm_b)).Dot(n);
+            if (speed>0) {
+                sum_a+=speed*arm_a;
+                sum_b+=speed*arm_b;
+                weight+=speed;
+            }
+        }
+        if (!weight) return;
+        const auto arm_a=sum_a/weight,arm_b=sum_b/weight;
+        const float closing=(a.GetPointVelocityCOM(arm_a)-b.GetPointVelocityCOM(arm_b)).Dot(n);
+        if (closing<.5f || -m.mPenetrationDepth>closing*dt+.0001f) return;
+        const float inv_mass=inverse_effective_mass(a,arm_a,n)+inverse_effective_mass(b,arm_b,n);
+        if (!(inv_mass>0)) return;
+        const float restitution=closing>=restitution_threshold ? settings.mCombinedRestitution : 0;
+        const auto point_a=center_a+arm_a,point_b=center_b+arm_b;
+        scrp_impact event{a.GetUserData(),b.GetUserData(),from(JPH::Vec3(point_a+.5f*(point_b-point_a))),from(n),
+                          from(qa*arm_a),from(qb*arm_b),from(na),from(nb),closing,(1+restitution)*closing/inv_mass};
+        ImpactCandidate entry{event,{sweep_end(a,va,center_a,time),sweep_end(b,vb,center_b,time)}};
+        if (event.body_a>event.body_b) {
+            std::swap(entry.event.body_a,entry.event.body_b);
+            std::swap(entry.event.local_point_a,entry.event.local_point_b);
+            std::swap(entry.event.local_normal_a,entry.event.local_normal_b);
+            entry.event.normal=from(-n);
+        }
+        // Jolt owns the simulation locks inside these callbacks. Use the two
+        // bodies already supplied; never acquire a BodyInterface lock here.
+        std::lock_guard<std::mutex> guard(mutex);
+        try { pending.push_back(entry); }
+        catch (const std::bad_alloc&) { failed=true; }
+    }
+};
 }
 struct PhysicsWorld {
     BroadLayers layers;
@@ -58,6 +207,7 @@ struct PhysicsWorld {
     PairFilter pair_filter;
     JPH::TempAllocatorMalloc allocator;
     JPH::JobSystemSingleThreaded jobs{JPH::cMaxPhysicsJobs};
+    ImpactListener impacts;
     JPH::PhysicsSystem system;
     std::unordered_map<scrp_body_id,JPH::BodyID> bodies;
     uint32_t capacity = 0;
@@ -68,9 +218,13 @@ struct PhysicsWorld {
         auto settings = system.GetPhysicsSettings();
         settings.mPenetrationSlop = 0.002f;
         system.SetPhysicsSettings(settings);
+        impacts.restitution_threshold=settings.mMinVelocityForRestitution;
+        impacts.cast_threshold=settings.mLinearCastThreshold;
+        system.SetContactListener(&impacts);
         bodies.reserve(capacity);
     }
     ~PhysicsWorld() {
+        system.SetContactListener(nullptr);
         auto& api = system.GetBodyInterface();
         for (auto item : bodies) { api.RemoveBody(item.second); api.DestroyBody(item.second); }
     }
@@ -139,6 +293,7 @@ int scrp_world_remove_body(scrp_world *world, scrp_body_id body, scrp_error *err
         if (id.IsInvalid()) return scrp::capi::fail(error,"Unknown body in this world");
         auto& api = w.system.GetBodyInterface();
         api.RemoveBody(id); api.DestroyBody(id); w.bodies.erase(body);
+        w.impacts.forget(body);
         return 1;
     });
 }
@@ -163,6 +318,7 @@ int scrp_world_set_pose(scrp_world *world, scrp_body_id body, scrp_pose pose, sc
         if (id.IsInvalid()) return scrp::capi::fail(error,"Unknown body in this world");
         auto& api = w.system.GetBodyInterface();
         api.SetPositionAndRotation(id,scrp::point(pose.position),scrp::quat(pose.rotation),JPH::EActivation::Activate);
+        w.impacts.forget(body);
         if (api.GetMotionType(id) == JPH::EMotionType::Dynamic) {
             api.SetLinearAndAngularVelocity(id,JPH::Vec3::sZero(),JPH::Vec3::sZero());
             JPH::BodyLockWrite lock(w.system.GetBodyLockInterface(),id);
@@ -196,8 +352,25 @@ int scrp_world_step(scrp_world *world, float dt, scrp_error *error) {
     return scrp::capi::boundary(error,[&]() {
         if (!world || !scrp::range(dt,1e-6f,1.0f/30.0f)) return scrp::capi::fail(error,"Physics step must be finite and in 0..1/30 second");
         auto& w = *world->impl;
-        if (w.system.Update(dt,1,&w.allocator,&w.jobs) != JPH::EPhysicsUpdateError::None)
+        w.impacts.begin(dt);
+        if (w.system.Update(dt,1,&w.allocator,&w.jobs) != JPH::EPhysicsUpdateError::None) {
+            w.impacts.abandon();
             return scrp::capi::fail(error,"Physics capacity exceeded during update");
+        }
+        if (!w.impacts.finish(w.system.GetBodyInterface()))
+            return scrp::capi::fail(error,"Unable to store physics impact events");
+        return 1;
+    });
+}
+uint32_t scrp_world_impact_count(const scrp_world *world) {
+    return world ? static_cast<uint32_t>(world->impl->impacts.snapshot.size()) : 0;
+}
+int scrp_world_impact_read(const scrp_world *world,uint32_t index,scrp_impact *out,scrp_error *error) {
+    return scrp::capi::boundary(error,[&](){
+        if (out) *out={};
+        if (!world || !out || index>=world->impl->impacts.snapshot.size())
+            return scrp::capi::fail(error,"Unknown impact index in this world");
+        *out=world->impl->impacts.snapshot[index];
         return 1;
     });
 }

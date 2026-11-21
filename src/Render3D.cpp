@@ -122,6 +122,14 @@ void main() {
 std::atomic<uint64_t> next_resource{1};
 struct Mesh { GLuint vao=0, vbo=0; GLsizei count=0; bool has_uv=false; };
 bool color_ok(scrp_color c) { return std::isfinite(c.r)&&std::isfinite(c.g)&&std::isfinite(c.b)&&std::isfinite(c.a); }
+bool uv_vertices_ok(const scrp_uv_vertex *vertices,uint32_t count) {
+    for (uint32_t i=0;i<count;++i) {
+        const auto& uv=vertices[i];
+        if (!capi::finite(uv.vertex.position) || !capi::finite(uv.vertex.normal) || !color_ok(uv.vertex.color) ||
+            !std::isfinite(uv.u) || !std::isfinite(uv.v)) return false;
+    }
+    return true;
+}
 }}
 
 struct scrp_view3d {
@@ -170,8 +178,8 @@ struct scrp_view3d {
             gl.EnableVertexAttribArray(3);
             gl.VertexAttribPointer(3,2,GL_FLOAT,GL_FALSE,stride,reinterpret_cast<void*>(offsetof(scrp_uv_vertex,u)));
         }
-        mesh.count=static_cast<GLsizei>(count);
         if (glGetError()!=GL_NO_ERROR) throw std::runtime_error("OpenGL mesh upload failed");
+        mesh.count=static_cast<GLsizei>(count);
     }
     scrp_mesh_id create_mesh(const void *vertices,uint32_t count,bool has_uv) {
         current();
@@ -282,12 +290,7 @@ int scrp_view3d_uv_mesh_create(scrp_view3d *view,const scrp_uv_vertex *vertices,
         if (out) *out=0;
         if (!view || !vertices || !out || !count || count%3 || count>3000000)
             return scrp::capi::fail(error,"UV mesh requires triangle vertices and an output");
-        for (uint32_t i=0;i<count;++i) {
-            const auto& v=vertices[i].vertex;
-            if (!scrp::capi::finite(v.position) || !scrp::capi::finite(v.normal) || !scrp::color_ok(v.color) ||
-                !std::isfinite(vertices[i].u) || !std::isfinite(vertices[i].v))
-                return scrp::capi::fail(error,"UV mesh vertices and coordinates must be finite");
-        }
+        if (!scrp::uv_vertices_ok(vertices,count)) return scrp::capi::fail(error,"UV mesh vertices and coordinates must be finite");
         *out=view->create_mesh(vertices,count,true);
         return 1;
     });
@@ -345,6 +348,14 @@ int scrp_view3d_mesh_update(scrp_view3d *view,scrp_mesh_id id,const scrp_vertex 
             return scrp::capi::fail(error,"Mesh update requires an owned mesh and triangles");
         for (uint32_t i=0;i<count;++i) if (!scrp::capi::finite(v[i].position) || !scrp::capi::finite(v[i].normal) || !scrp::color_ok(v[i].color))
             return scrp::capi::fail(error,"Mesh vertices must be finite");
+        view->current(); view->upload(view->meshes.at(id),v,count,GL_DYNAMIC_DRAW); return 1;
+    });
+}
+int scrp_view3d_uv_mesh_update(scrp_view3d *view,scrp_mesh_id id,const scrp_uv_vertex *v,uint32_t count,scrp_error *error) {
+    return scrp::capi::boundary(error,[&]() {
+        if (!view || !view->meshes.count(id) || !view->meshes.at(id).has_uv || !v || !count || count%3 || count>3000000)
+            return scrp::capi::fail(error,"UV mesh update requires an owned textured mesh and triangles");
+        if (!scrp::uv_vertices_ok(v,count)) return scrp::capi::fail(error,"UV mesh vertices and coordinates must be finite");
         view->current(); view->upload(view->meshes.at(id),v,count,GL_DYNAMIC_DRAW); return 1;
     });
 }

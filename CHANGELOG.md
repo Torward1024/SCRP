@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Expose step-local rigid-body impact snapshots, including contact frames,
+  normal closing speeds and effective-mass impulse estimates.
+- Apply bounded ellipsoidal dents to textured geometry, retain authored
+  shading and UVs, and update an existing textured GPU mesh.
+
 - Read named GLB 2.0 mesh primitives and embedded images through a C17 Core API.
   Indexed triangles expand into ordered CPU arrays for rendering or deformation.
 - Enable in-memory PNG textures with `SCRP_RENDER3D_PNG=ON` and libpng.

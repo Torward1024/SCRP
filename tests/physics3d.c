@@ -11,7 +11,125 @@ static scrp_body_desc box(float x, float y, float mass) {
     d.mass = mass; d.friction = 0.7f; d.continuous = 1;
     return d;
 }
+static void impact_contract(void) {
+    scrp_error error={{0}};
+    scrp_world *world=NULL;
+    scrp_world_desc wd={{0,0,0},16};
+    scrp_impact e;
+    CHECK(!scrp_world_impact_count(NULL) && !scrp_world_impact_read(NULL,0,&e,&error));
+    CHECK(scrp_world_create(&wd,&world,&error));
+    if (!world) return;
+
+    /* The box's leading face hits a narrow post while translating sideways.
+       At 180 m/s the first contact is 0.72 m ahead of the initial pose,
+       so using the start pose would put the local witness outside the box. */
+    scrp_body_id post,body;
+    scrp_body_desc target=box(.55f,0,0); target.half_extent=(scrp_vec3){.11f,2,.08f};
+    scrp_body_desc mover=box(0,0,1000);
+    mover.half_extent=(scrp_vec3){.8f,.4f,1.2f}; mover.pose.position.z=-2;
+    CHECK(scrp_world_add_box(world,&target,&post,&error) && scrp_world_add_box(world,&mover,&body,&error));
+    CHECK(scrp_world_apply_impulse(world,body,(scrp_vec3){30000,0,180000},mover.pose.position,&error));
+    CHECK(scrp_world_step(world,1.f/30,&error) && scrp_world_impact_count(world)==1);
+    CHECK(scrp_world_impact_read(world,0,&e,&error));
+    CHECK(e.body_a==post && e.body_b==body && e.normal.z<-.99f && e.local_normal_b.z>.99f);
+    CHECK(fabsf(e.point.x-.55f)<.01f && fabsf(e.point.z+.08f)<.01f);
+    CHECK(fabsf(e.local_point_b.x-.43f)<.01f && fabsf(e.local_point_b.z-1.2f)<.01f);
+    CHECK(fabsf(e.closing_speed-180)<.02f && e.estimated_normal_impulse>100000 && e.estimated_normal_impulse<180000);
+    CHECK(!scrp_world_impact_read(world,1,&e,&error) && !e.body_a && error.message[0]);
+    CHECK(scrp_world_remove_body(world,post,&error) && !scrp_world_impact_count(world));
+    CHECK(scrp_world_remove_body(world,body,&error));
+
+    /* Two equal CCD bodies moving sideways together and towards one another.
+       The rotated body's forward end is its positive local Z face as well. */
+    scrp_body_id a,b;
+    mover=box(0,0,2000); mover.pose.position.z=-2; mover.friction=0;
+    CHECK(scrp_world_add_box(world,&mover,&a,&error));
+    CHECK(scrp_world_apply_impulse(world,a,(scrp_vec3){40000,0,220000},mover.pose.position,&error));
+    mover.pose.position.z=2; mover.pose.rotation=(scrp_quat){0,1,0,0};
+    CHECK(scrp_world_add_box(world,&mover,&b,&error));
+    CHECK(scrp_world_apply_impulse(world,b,(scrp_vec3){40000,0,-180000},mover.pose.position,&error));
+    CHECK(scrp_world_step(world,1.f/30,&error) && scrp_world_impact_count(world)==1 && scrp_world_impact_read(world,0,&e,&error));
+    CHECK(e.body_a==a && e.body_b==b && e.normal.z>.99f && e.local_normal_a.z>.99f && e.local_normal_b.z>.99f);
+    CHECK(fabsf(e.local_point_a.z-.5f)<.004f && fabsf(e.local_point_b.z-.5f)<.004f);
+    CHECK(fabsf(e.point.x-.30f)<.005f && fabsf(e.local_point_a.x)<.005f && fabsf(e.local_point_b.x)<.005f);
+    CHECK(fabsf(e.closing_speed-200)<.05f && fabsf(e.estimated_normal_impulse-200000)<80);
+    CHECK(scrp_world_set_pose(world,b,mover.pose,&error) && !scrp_world_impact_count(world));
+    scrp_world_destroy(&world);
+
+    /* A following CCD body catches a moving body before it reaches a wall.
+       Jolt announces a tentative second hit while finding casts; the nearer
+       collision cancels it during CCD resolution. Only the real pair survives. */
+    CHECK(scrp_world_create(&wd,&world,&error));
+    target=box(0,0,0); target.pose.position.z=3;
+    CHECK(scrp_world_add_box(world,&target,&post,&error));
+    mover=box(0,0,1000); mover.pose.position.z=-2;
+    CHECK(scrp_world_add_box(world,&mover,&a,&error) && scrp_world_apply_impulse(world,a,(scrp_vec3){0,0,180000},mover.pose.position,&error));
+    mover.pose.position.z=0;
+    CHECK(scrp_world_add_box(world,&mover,&b,&error) && scrp_world_apply_impulse(world,b,(scrp_vec3){0,0,90000},mover.pose.position,&error));
+    CHECK(scrp_world_step(world,1.f/30,&error));
+    if (scrp_world_impact_count(world)!=1) {
+        scrp_body_state s1,s2;
+        scrp_world_body_state(world,a,&s1,&error); scrp_world_body_state(world,b,&s2,&error);
+        fprintf(stderr,"Three-body CCD reported %u events, bodies ended at %.3f and %.3f m, %.3f and %.3f m/s\n",
+                scrp_world_impact_count(world),s1.pose.position.z,s2.pose.position.z,s1.linear_velocity.z,s2.linear_velocity.z);
+        for (uint32_t i=0;i<scrp_world_impact_count(world);++i) {
+            scrp_world_impact_read(world,i,&e,&error);
+            fprintf(stderr,"Pair %llu %llu, speed %.3f at z %.3f\n",(unsigned long long)e.body_a,(unsigned long long)e.body_b,e.closing_speed,e.point.z);
+        }
+    }
+    CHECK(scrp_world_impact_count(world)==1 && scrp_world_impact_read(world,0,&e,&error));
+    CHECK(e.body_a==a && e.body_b==b);
+    scrp_world_destroy(&world);
+
+    /* A fast sideswipe registers only the normal approach. Continuing to
+       slide along the same wall supplies no fresh impact episodes. */
+    CHECK(scrp_world_create(&wd,&world,&error));
+    target=box(.5f,0,0); target.half_extent=(scrp_vec3){.5f,2,200}; target.friction=0;
+    mover=box(-.55f,0,1000); mover.friction=0;
+    CHECK(scrp_world_add_box(world,&target,&post,&error) && scrp_world_add_box(world,&mover,&a,&error));
+    CHECK(scrp_world_apply_impulse(world,a,(scrp_vec3){2000,0,60000},mover.pose.position,&error));
+    unsigned count=0;
+    for (int i=0;i<60;++i) {
+        CHECK(scrp_world_step(world,1.f/120,&error));
+        if (scrp_world_impact_count(world)) {
+            ++count; CHECK(scrp_world_impact_read(world,0,&e,&error));
+            CHECK(fabsf(e.closing_speed-2)<.02f && fabsf(e.estimated_normal_impulse-2000)<25);
+        }
+    }
+    CHECK(count==1);
+    scrp_world_destroy(&world);
+
+    wd.gravity.y=-9.81f;
+    CHECK(scrp_world_create(&wd,&world,&error));
+    target=box(0,-.5f,0); target.half_extent=(scrp_vec3){10,.5f,10};
+    mover=box(0,3,1000);
+    CHECK(scrp_world_add_box(world,&target,&post,&error) && scrp_world_add_box(world,&mover,&a,&error));
+    count=0;
+    for (int i=0;i<350;++i) {
+        CHECK(scrp_world_step(world,1.f/120,&error));
+        if (scrp_world_impact_count(world)) {
+            ++count; CHECK(scrp_world_impact_read(world,0,&e,&error));
+            CHECK(e.normal.y>.99f && e.local_normal_b.y<-.99f && fabsf(e.local_point_b.y+.5f)<.01f);
+            CHECK(e.closing_speed>6 && e.closing_speed<8);
+        }
+    }
+    CHECK(count==1 && !scrp_world_impact_count(world));
+    /* A renewed shove into the existing contact can start an episode. Then
+       support under a sustained heavy force must not publish one every tick. */
+    CHECK(scrp_world_apply_impulse(world,a,(scrp_vec3){0,-4000,0},(scrp_vec3){0,.5f,0},&error));
+    CHECK(scrp_world_step(world,1.f/120,&error) && scrp_world_impact_count(world)==1);
+    CHECK(scrp_world_impact_read(world,0,&e,&error) && e.closing_speed>=3.9f);
+    count=0;
+    for (int i=0;i<150;++i) {
+        CHECK(scrp_world_apply_force(world,a,(scrp_vec3){0,-150000,0},(scrp_vec3){0,.5f,0},&error));
+        CHECK(scrp_world_step(world,1.f/120,&error));
+        count+=scrp_world_impact_count(world);
+    }
+    CHECK(count<=1);
+    scrp_world_destroy(&world);
+}
 int main(void) {
+    impact_contract();
     scrp_error error = {{0}};
     scrp_world *world = NULL, *other = NULL;
     scrp_world_desc wd = {{0,-9.81f,0},64};

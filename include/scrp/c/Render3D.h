@@ -29,7 +29,7 @@ int scrp_view3d_key_down(const scrp_view3d *view, const char *name);
 int scrp_view3d_mesh_create(scrp_view3d *view, const scrp_vertex *triangles, uint32_t count, scrp_mesh_id *out, scrp_error *error);
 int scrp_view3d_mesh_destroy(scrp_view3d *view, scrp_mesh_id mesh, scrp_error *error);
 /* UV coordinates start at the top left. Each textured triangle can have seams.
-   UV meshes are immutable and can share any texture owned by this view. */
+   UV meshes can share any texture owned by this view. */
 int scrp_view3d_uv_mesh_create(scrp_view3d *view, const scrp_uv_vertex *triangles,
                                uint32_t count, scrp_mesh_id *out, scrp_error *error);
 /* Load a BMP file into a view-owned texture with clamped edges. */
@@ -40,6 +40,8 @@ int scrp_view3d_texture_destroy(scrp_view3d *view, scrp_texture_id texture, scrp
 /* Replace vertices of an owned mesh. Validate all input before touching GPU data. */
 int scrp_view3d_mesh_update(scrp_view3d *view, scrp_mesh_id mesh,
                             const scrp_vertex *triangles, uint32_t count, scrp_error *error);
+int scrp_view3d_uv_mesh_update(scrp_view3d *view, scrp_mesh_id mesh,
+                               const scrp_uv_vertex *triangles, uint32_t count, scrp_error *error);
 /* Centered unit box; cylinder is length 1 along X, radius 1 in YZ. Flat normals. */
 int scrp_view3d_box_mesh(scrp_view3d *view, scrp_mesh_id *out, scrp_error *error);
 int scrp_view3d_cylinder_mesh(scrp_view3d *view, uint32_t segments, scrp_mesh_id *out, scrp_error *error);

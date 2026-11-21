@@ -53,9 +53,13 @@ static void test_atlas(scrp_view3d *view,scrp_view3d *other,scrp_mesh_id plain,i
         CHECK(scrp_view3d_texture_load_bmp(view,atlas_path,&texture,&error));
     }
     CHECK(!scrp_view3d_texture_destroy(other,texture,&error));
-    CHECK(scrp_view3d_uv_mesh_create(view,quad,6,&mesh,&error));
+    CHECK(scrp_view3d_uv_mesh_create(view,quad,3,&mesh,&error));
+    CHECK(!scrp_view3d_uv_mesh_update(other,mesh,quad,6,&error));
+    CHECK(!scrp_view3d_uv_mesh_update(view,plain,quad,6,&error));
+    CHECK(scrp_view3d_uv_mesh_update(view,mesh,quad,6,&error));
     scrp_mesh_id invalid=99;
     quad[0].v=NAN;
+    CHECK(!scrp_view3d_uv_mesh_update(view,mesh,quad,6,&error));
     CHECK(!scrp_view3d_uv_mesh_create(view,quad,6,&invalid,&error) && invalid==0);
     const scrp_vertex ordinary_triangle[3]={quad[0].vertex,quad[1].vertex,quad[2].vertex};
     CHECK(!scrp_view3d_mesh_update(view,mesh,ordinary_triangle,3,&error));
